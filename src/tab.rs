@@ -3625,7 +3625,7 @@ impl Tab {
                         } else if let Some(path) = location.path_opt() {
                             commands.push(Command::OpenFile(vec![OpenTarget {
                                 path: path.clone(),
-                                uri_opt: None,
+                                uri_opt: location.uri_opt().map(String::from),
                             }]));
                         } else {
                             log::warn!("no path for item {clicked_item:?}");
