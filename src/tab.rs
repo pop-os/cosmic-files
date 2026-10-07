@@ -4366,7 +4366,7 @@ impl Tab {
                     // Open selected items
                     None => {
                         enum ResolveResult {
-                            Open(Option<PathBuf>),
+                            Open(Option<OpenTarget>),
                             OpenInTab(Option<PathBuf>),
                             OpenTrash,
                             OpenProperties,
@@ -4400,7 +4400,10 @@ impl Tab {
                                     }
                                     Mode::Desktop => match location {
                                         Location::Trash => ResolveResult::OpenTrash,
-                                        _ => ResolveResult::Open(path_opt.cloned()),
+                                        _ => ResolveResult::Open(path_opt.map(|path| OpenTarget {
+                                            path: path.clone(),
+                                            uri_opt: location.uri_opt().map(String::from),
+                                        })),
                                     },
                                     Mode::Dialog(_) => {
                                         if is_only_one_selected {
@@ -4411,7 +4414,10 @@ impl Tab {
                                     }
                                 }
                             } else {
-                                ResolveResult::Open(path_opt.cloned())
+                                ResolveResult::Open(path_opt.map(|path| OpenTarget {
+                                    path: path.clone(),
+                                    uri_opt: location.uri_opt().map(String::from),
+                                }))
                             }
                         }
                         let mut open_files = Vec::new();
@@ -4420,7 +4426,7 @@ impl Tab {
 
                             for item in items.iter() {
                                 match resolve_item(item, &self.mode, selected_count == 1) {
-                                    ResolveResult::Open(Some(p)) => open_files.push(p),
+                                    ResolveResult::Open(Some(target)) => open_files.push(target),
                                     ResolveResult::OpenInTab(Some(p)) => {
                                         commands.push(Command::OpenInNewTab(p))
                                     }
@@ -4432,15 +4438,7 @@ impl Tab {
                             }
                         }
                         if !open_files.is_empty() {
-                            commands.push(Command::OpenFile(
-                                open_files
-                                    .into_iter()
-                                    .map(|path| OpenTarget {
-                                        path,
-                                        uri_opt: None,
-                                    })
-                                    .collect(),
-                            ));
+                            commands.push(Command::OpenFile(open_files));
                         }
                     }
                 }
