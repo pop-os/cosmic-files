@@ -4494,7 +4494,11 @@ impl Tab {
                             } else {
                                 commands.push(Command::OpenFile(vec![OpenTarget {
                                     path: path.clone(),
-                                    uri_opt: None,
+                                    uri_opt: clicked_item
+                                        .location_opt
+                                        .as_ref()
+                                        .and_then(Location::uri_opt)
+                                        .map(String::from),
                                 }]));
                             }
                         } else {
