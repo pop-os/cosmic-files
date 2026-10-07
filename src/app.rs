@@ -563,6 +563,7 @@ pub enum DialogPage {
     },
     OpenWith {
         path: PathBuf,
+        uri_opt: Option<String>,
         mime: mime_guess::Mime,
         selected: usize,
         store_opt: Option<Arc<MimeApp>>,
@@ -3862,6 +3863,7 @@ impl Application for App {
                             self.push_dialog(
                                 DialogPage::OpenWith {
                                     path: path.clone(),
+                                    uri_opt: None,
                                     mime: item.mime.clone(),
                                     selected: 0,
                                     store_opt: "x-scheme-handler/mime"
@@ -5049,17 +5051,25 @@ impl Application for App {
                     }
                 }
                 NavMenuAction::OpenWith(entity) => {
-                    if let Some(path) = self
-                        .nav_model
-                        .data::<Location>(entity)
-                        .and_then(Location::path_opt)
-                        .cloned()
-                    {
+                    if let Some(location) = self.nav_model.data::<Location>(entity) {
+                        let (path, uri_opt) = match location {
+                            Location::Network(uri, _, Some(path)) => {
+                                (path.clone(), Some(uri.clone()))
+                            }
+                            _ => {
+                                match location.path_opt().cloned() {
+                                    Some(path) => (path, None),
+                                    None => return Task::none(),
+                                }
+                            }
+                        };
+
                         match tab::item_from_path(&path, IconSizes::default()) {
                             Ok(item) => {
                                 return self.push_dialog(
                                     DialogPage::OpenWith {
                                         path,
+                                        uri_opt,
                                         mime: item.mime,
                                         selected: 0,
                                         store_opt: "x-scheme-handler/mime"
@@ -5930,6 +5940,7 @@ impl Application for App {
             }
             DialogPage::OpenWith {
                 path,
+                uri_opt,
                 mime,
                 selected,
                 store_opt,
@@ -6022,6 +6033,7 @@ impl Application for App {
                         .on_input(move |search_app_name| {
                             Message::DialogUpdate(DialogPage::OpenWith {
                                 path: path.clone(),
+                                uri_opt: uri_opt.clone(),
                                 mime: mime.clone(),
                                 selected: *selected,
                                 store_opt: store_opt.clone(),
