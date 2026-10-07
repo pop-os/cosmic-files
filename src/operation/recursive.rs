@@ -239,7 +239,9 @@ impl Context {
         }
 
         // Flush files to disk
-        sync_to_disk(written_files, target_dirs).await;
+        sync_to_disk(written_files, target_dirs)
+            .await
+            .map_err(|e| OperationError::from_err(e, &self.controller))?;
 
         Ok(true)
     }
