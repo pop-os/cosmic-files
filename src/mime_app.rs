@@ -82,15 +82,15 @@ pub fn exec_to_command(
 
     let paths = path_opt
         .iter()
-        .map(AsRef::as_ref)
-        .map(Some)
+        .enumerate()
+        .map(|(index, path)| (index, Some(path.as_ref())))
         // Add a single `None` if no path was given.
         .chain(std::iter::repeat_n(
-            None,
+            (0, None),
             if path_opt.is_empty() { 1 } else { 0 },
         ));
 
-    for path in paths {
+    for (index, path) in paths {
         let mut batch_process = false;
         let mut args = Vec::with_capacity(arguments.len());
         let mut field_code_used = false;
@@ -110,8 +110,7 @@ pub fn exec_to_command(
                             }
                         }
 
-                        // %f and %u behave the same in a file manager.
-                        Some('f' | 'u') => {
+                        Some('f') => {
                             if let Some(path) = path
                                 && !field_code_used
                             {
@@ -122,12 +121,44 @@ pub fn exec_to_command(
                             }
                         }
 
-                        // %F and %U behave the same in a file manager.
-                        Some('F') | Some('U') => {
+                        Some('u') => {
+                            if let Some(path) = path
+                                && !field_code_used
+                            {
+                                batch_process = true;
+                                field_code_used = true;
+
+                                let value = uri_opt
+                                    .and_then(|uris| uris.get(index))
+                                    .and_then(Option::as_deref)
+                                    .map(str::as_bytes)
+                                    .unwrap_or(path.as_bytes());
+
+                                new_argument.push_str(value);
+                            }
+                        }
+
+                        Some('F') => {
                             if !field_code_used && new_argument.is_empty() {
                                 field_code_used = true;
                                 for path in path_opt.iter().map(AsRef::as_ref) {
                                     args.push(BString::new(path.as_bytes().to_owned()));
+                                }
+                            }
+                        }
+
+                        Some('U') => {
+                            if !field_code_used && new_argument.is_empty() {
+                                field_code_used = true;
+
+                                for (path_index, path) in path_opt.iter().enumerate() {
+                                    let value = uri_opt
+                                        .and_then(|uris| uris.get(path_index))
+                                        .and_then(Option::as_deref)
+                                        .map(str::as_bytes)
+                                        .unwrap_or_else(|| path.as_ref().as_bytes());
+
+                                    args.push(BString::new(value.to_owned()));
                                 }
                             }
                         }
@@ -702,6 +733,21 @@ mod tests {
         );
         assert_eq!("-w", args.next().unwrap().to_str().unwrap());
         assert_eq!(paths[0], args.next().unwrap().to_str().unwrap());
+
+        let uris = [Some("smb://server/share/file")];
+        let commands = exec_to_command(exec, "one_path_u_field_code", None, &paths, Some(&uris))
+            .expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+        let mut args = command.get_args();
+
+        assert_eq!(
+            "/usr/bin/cosmic-term",
+            command.get_program().to_str().unwrap()
+        );
+        assert_eq!("-w", args.next().unwrap().to_str().unwrap());
+        assert_eq!(uris[0].unwrap(), args.next().unwrap().to_str().unwrap());
     }
 
     #[test]
@@ -717,6 +763,25 @@ mod tests {
 
         assert_eq!("/usr/bin/rmrfbye", command.get_program().to_str().unwrap());
         assert_eq!("/", command.get_args().next().unwrap().to_str().unwrap());
+
+        let uris = [Some("smb://server/share/file")];
+        let commands = exec_to_command(
+            exec,
+            "one_path_U_field_code",
+            None,
+            &paths,
+            Some(&uris),
+        )
+        .expect("Should parse valid exec");
+
+        assert_eq!(1, commands.len());
+        let command = commands.first().unwrap();
+
+        assert_eq!("/usr/bin/rmrfbye", command.get_program().to_str().unwrap());
+        assert_eq!(
+            uris[0].unwrap(),
+            command.get_args().next().unwrap().to_str().unwrap()
+        );
     }
 
     #[test]
