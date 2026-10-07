@@ -27,6 +27,8 @@ standard::icon,\
 standard::is-hidden,\
 time::modified";
 
+type DirInfoSender = mpsc::Sender<Result<(String, String, Option<PathBuf>), glib::Error>>;
+
 fn resolve_uri(uri: &str) -> (String, gio::File) {
     let file = gio::File::for_uri(uri);
     // Resolve the target-uri if it exists
@@ -326,10 +328,7 @@ enum Cmd {
         IconSizes,
         mpsc::Sender<Result<Vec<tab::Item>, String>>,
     ),
-    DirInfo(
-        String,
-        mpsc::Sender<Result<(String, String, Option<PathBuf>), glib::Error>>,
-    ),
+    DirInfo(String, DirInfoSender),
     Unmount(MounterItem),
 }
 

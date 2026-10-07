@@ -73,7 +73,7 @@ pub trait TrashExt {
 /// (or return the id directly if it's already a filesystem path).
 pub fn trash_item_path(item: &trash::TrashItem) -> Option<PathBuf> {
     let id_path = Path::new(&item.id);
-    if id_path.extension().map_or(false, |e| e == "trashinfo") {
+    if id_path.extension().is_some_and(|e| e == "trashinfo") {
         let trash_root = id_path.parent()?.parent()?;
         let file_name = id_path.file_stem()?;
         Some(trash_root.join("files").join(file_name))
