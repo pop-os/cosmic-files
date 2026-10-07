@@ -1578,6 +1578,13 @@ impl Location {
         })
     }
 
+    pub fn uri_opt(&self) -> Option<&str> {
+        match self {
+            Self::Network(uri, ..) => Some(uri),
+            _ => None,
+        }
+    }
+
     pub const fn path_opt(&self) -> Option<&PathBuf> {
         match self {
             Self::Desktop(path, ..) => Some(path),
@@ -3570,7 +3577,10 @@ impl Tab {
                                     if item.metadata.is_dir() {
                                         cd = Some(location.clone());
                                     } else if let Some(path) = location.path_opt() {
-                                        paths_to_open.push(path.clone());
+                                        paths_to_open.push(OpenTarget {
+                                            path: path.clone(),
+                                            uri_opt: location.uri_opt().map(String::from),
+                                        });
                                     } else {
                                         log::warn!("no path for item {item:?}");
                                     }
@@ -3581,15 +3591,7 @@ impl Tab {
                         }
                     }
                     if !paths_to_open.is_empty() {
-                        commands.push(Command::OpenFile(
-                            paths_to_open
-                                .into_iter()
-                                .map(|path| OpenTarget {
-                                    path,
-                                    uri_opt: None,
-                                })
-                                .collect(),
-                        ));
+                        commands.push(Command::OpenFile(paths_to_open));
                     }
                 }
 
