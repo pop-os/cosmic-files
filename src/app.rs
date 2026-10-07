@@ -3861,11 +3861,16 @@ impl Application for App {
                         let Some(path) = item.path_opt() else {
                             continue;
                         };
+                        let uri_opt = match &tab.location {
+                            tab::Location::Network(uri, _, _) => Some(uri.clone()),
+                            _ => None,
+                        };
+
                         return Task::batch([
                             self.push_dialog(
                                 DialogPage::OpenWith {
                                     path: path.clone(),
-                                    uri_opt: None,
+                                    uri_opt,
                                     mime: item.mime.clone(),
                                     selected: 0,
                                     store_opt: "x-scheme-handler/mime"
