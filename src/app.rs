@@ -899,6 +899,7 @@ impl App {
                             entry.name(&locales).as_deref().unwrap_or_default(),
                             Some(path),
                             &[] as &[&str; 0],
+                            None,
                         ) {
                             Some(commands) => {
                                 let cwd_opt = entry.desktop_entry("Path");
@@ -940,7 +941,7 @@ impl App {
         P: std::fmt::Debug + AsRef<Path> + AsRef<std::ffi::OsStr>,
     {
         for app in self.mime_app_cache.get(mime) {
-            let Some(commands) = app.command(paths) else {
+            let Some(commands) = app.command(paths, None) else {
                 continue;
             };
             let len = commands.len();
@@ -3210,7 +3211,7 @@ impl Application for App {
 
                             if let Some((app, _)) = available_apps.get(selected) {
                                 if let Some(mut command) =
-                                    app.command(&[&path]).and_then(|v| v.into_iter().next())
+                                    app.command(&[&path], None).and_then(|v| v.into_iter().next())
                                 {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
@@ -3750,7 +3751,7 @@ impl Application for App {
                     }
                     for path in paths {
                         if let Some(mut command) = terminal
-                            .command::<&str>(&[])
+                            .command::<&str>(&[], None)
                             .and_then(|v| v.into_iter().next())
                         {
                             command.current_dir(path);
@@ -3813,7 +3814,7 @@ impl Application for App {
                     let url = format!("mime:///{mime}");
                     // TODO: Support multiple URLs
                     if let Some(mut command) =
-                        app.command(&[&url]).and_then(|v| v.into_iter().next())
+                        app.command(&[&url], None).and_then(|v| v.into_iter().next())
                     {
                         if let Err(err) = spawn_detached(&mut command) {
                             log::warn!("failed to open {:?} with {:?}: {}", url, app.id, err);

@@ -69,6 +69,7 @@ pub fn exec_to_command(
     entry_name: &str,
     entry_path: Option<&Path>,
     path_opt: &[impl AsRef<OsStr>],
+    uri_opt: Option<&[Option<&str>]>,
 ) -> Option<Vec<process::Command>> {
     let arguments = shlex::split(exec)?;
 
@@ -197,12 +198,17 @@ pub struct MimeApp {
 
 impl MimeApp {
     //TODO: move to libcosmic, support multiple files
-    pub fn command<O: AsRef<OsStr>>(&self, path_opt: &[O]) -> Option<Vec<process::Command>> {
+    pub fn command<O: AsRef<OsStr>>(
+        &self,
+        path_opt: &[O],
+        uri_opt: Option<&[Option<&str>]>,
+    ) -> Option<Vec<process::Command>> {
         exec_to_command(
             self.exec.as_deref()?,
             &self.name,
             self.path.as_deref(),
             path_opt,
+            uri_opt,
         )
     }
 
@@ -615,7 +621,7 @@ mod tests {
     fn keys_within_words() {
         let exec = "/usr/bin/foo --option=%f";
         let paths = ["file1"];
-        let commands = exec_to_command(exec, "keys_within_words", None, &paths)
+        let commands = exec_to_command(exec, "keys_within_words", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
@@ -632,7 +638,7 @@ mod tests {
     fn no_path_f_field_code() {
         let exec = "/usr/bin/foo %f";
         let paths: [&str; 0] = [];
-        let commands = exec_to_command(exec, "no_path_f_field_code", None, &paths)
+        let commands = exec_to_command(exec, "no_path_f_field_code", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
@@ -646,7 +652,7 @@ mod tests {
     fn one_path_f_field_code() {
         let exec = "/usr/bin/foo %f";
         let paths = ["file1"];
-        let commands = exec_to_command(exec, "one_path_f_field_code", None, &paths)
+        let commands = exec_to_command(exec, "one_path_f_field_code", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
@@ -664,7 +670,7 @@ mod tests {
     fn one_path_F_field_code() {
         let exec = "/usr/bin/cosmic-term -w %F";
         let paths = ["/home/user"];
-        let commands = exec_to_command(exec, "one_path_F_field_code", None, &paths)
+        let commands = exec_to_command(exec, "one_path_F_field_code", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
@@ -683,7 +689,7 @@ mod tests {
     fn one_path_u_field_code() {
         let exec = "/usr/bin/cosmic-term -w %u";
         let paths = ["/home/user"];
-        let commands = exec_to_command(exec, "one_path_u_field_code", None, &paths)
+        let commands = exec_to_command(exec, "one_path_u_field_code", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
@@ -703,7 +709,7 @@ mod tests {
     fn one_path_U_field_code() {
         let exec = "/usr/bin/rmrfbye %U";
         let paths = ["/"];
-        let commands = exec_to_command(exec, "one_path_U_field_code", None, &paths)
+        let commands = exec_to_command(exec, "one_path_U_field_code", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
@@ -720,7 +726,7 @@ mod tests {
             "/usr/share/games/psp/miku.iso",
             "/usr/share/games/psp/eternia.iso",
         ];
-        let commands = exec_to_command(exec, "mult_path_f_field_code", None, &paths)
+        let commands = exec_to_command(exec, "mult_path_f_field_code", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(paths.len(), commands.len());
@@ -741,7 +747,7 @@ mod tests {
             "/usr/share/games/doom2/hr.wad",
             "/usr/share/games/doom2/hrmus.wad",
         ];
-        let commands = exec_to_command(exec, "mult_path_F_field_code", None, &paths)
+        let commands = exec_to_command(exec, "mult_path_F_field_code", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
@@ -764,7 +770,7 @@ mod tests {
             "https://redox-os.org/",
             "https://system76.com/",
         ];
-        let commands = exec_to_command(exec, "mult_path_u_field_code", None, &paths)
+        let commands = exec_to_command(exec, "mult_path_u_field_code", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(paths.len(), commands.len());
@@ -788,7 +794,7 @@ mod tests {
             "frieren01.mkv",
             "rtmp://example.org/this/video/doesnt/exist.avi",
         ];
-        let commands = exec_to_command(exec, "mult_path_U_field_code", None, &paths)
+        let commands = exec_to_command(exec, "mult_path_U_field_code", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
@@ -817,7 +823,7 @@ mod tests {
             "@@u",
         ];
         let paths = ["file1.rs", "file2.rs"];
-        let commands = exec_to_command(exec, "flatpak_style_exec", None, &paths)
+        let commands = exec_to_command(exec, "flatpak_style_exec", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
@@ -841,7 +847,7 @@ mod tests {
             "file:///usr/share/games/roguelike/mods/mod1",
             "file:///usr/share/games/roguelike/mods/mod2",
         ];
-        let commands = exec_to_command(exec, "multiple_field_codes", None, &paths)
+        let commands = exec_to_command(exec, "multiple_field_codes", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
@@ -875,7 +881,7 @@ mod tests {
         ];
         let paths = ["rust_game_dev.pdf", "superhero_ferris.epub"];
         let args_trailing = ["@@"];
-        let commands = exec_to_command(exec, "sandwiched_field_code", None, &paths)
+        let commands = exec_to_command(exec, "sandwiched_field_code", None, &paths, None)
             .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
