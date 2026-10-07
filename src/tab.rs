@@ -162,54 +162,91 @@ fn button_appearance(
 ) -> widget::button::Style {
     let cosmic = theme.cosmic();
     let mut appearance = widget::button::Style::new();
-    if selected {
+    let mut background = Color::TRANSPARENT;
+    let mut icon_color = Color::from(cosmic.on_bg_component_color());
+    let mut text_color = Color::from(cosmic.on_bg_component_color());
+
+    // Button is highlighted (hover, etc)
+    if highlighted {
+        background = Color::from(cosmic.bg_component_color());
         if accent {
-            appearance.background = Some(Color::from(cosmic.accent_color()).into());
-            appearance.icon_color = Some(Color::from(cosmic.on_accent_color()));
-            if cut {
-                appearance.text_color = Some(Color::from(cosmic.accent.on_disabled));
-            } else {
-                appearance.text_color = Some(Color::from(cosmic.on_accent_color()));
-            }
-        } else {
-            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
+            background = Color::from(cosmic.accent_color());
+            icon_color = Color::from(cosmic.on_accent_color());
+            text_color = Color::from(cosmic.on_accent_color());
         }
-    } else if highlighted {
-        if accent {
-            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
-            appearance.icon_color = Some(Color::from(cosmic.on_bg_component_color()));
-            appearance.text_color = Some(Color::from(cosmic.on_bg_component_color()));
-            if cut {
-                appearance.text_color = Some(Color::from(
-                    cosmic.background(theme.transparent).component.on_disabled,
-                ));
-            } else {
-                appearance.text_color = Some(Color::from(cosmic.on_bg_component_color()));
-            }
-        } else {
-            appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
-        }
-    } else if desktop {
-        appearance.background = Some(Color::from(cosmic.bg_color()).into());
-        appearance.icon_color = Some(Color::from(cosmic.on_bg_color()));
-        if cut {
-            appearance.text_color = Some(Color::from(
-                cosmic.background(theme.transparent).component.disabled,
-            ));
-        } else {
-            appearance.text_color = Some(Color::from(cosmic.on_bg_color()));
-        }
-    } else if cut {
-        appearance.text_color = Some(Color::from(
-            cosmic.background(theme.transparent).component.on_disabled,
-        ));
     }
+
+    // Button is selected
+    else if selected {
+        background = Color::from(cosmic.bg_component_color());
+        if accent {
+            background = Color::from(cosmic.accent_color());
+            icon_color = Color::from(cosmic.on_accent_color());
+            text_color = Color::from(cosmic.on_accent_color());
+        }
+    }
+
+    // Button is an item on the desktop
+    else if desktop {
+        background = Color::from(cosmic.bg_color());
+        icon_color = Color::from(cosmic.on_bg_color());
+        text_color = Color::from(cosmic.on_bg_color());
+    }
+    
+    // Visually indicate cut items
+    if cut {
+        let disabled_color = Color::from(
+            cosmic.background(theme.transparent).component.on_disabled,
+        );
+        if !accent {
+            background = Color::from(
+                cosmic.background(theme.transparent).component.disabled,
+            ).scale_alpha(0.1);
+            icon_color = disabled_color;
+            text_color = disabled_color;
+        }
+        appearance.outline_width = 1.0;
+        appearance.outline_color = disabled_color.scale_alpha(0.25);
+    }
+
+    // Ensure legibility of text on the backgrounds
+    let bg_check = if background == Color::TRANSPARENT {
+            Color::from(cosmic.bg_color())
+        } else {
+            background
+    };
+    if !text_color.is_readable_on(background) {
+        if Color::from(cosmic.on_bg_color()).is_readable_on(bg_check) {
+            icon_color = Color::from(cosmic.on_bg_color());
+            text_color = Color::from(cosmic.on_bg_color());
+        }
+        else if Color::from(cosmic.on_bg_component_color()).is_readable_on(bg_check) {
+            icon_color = Color::from(cosmic.on_bg_component_color());
+            text_color = Color::from(cosmic.on_bg_component_color());
+        }
+        else if Color::WHITE.is_readable_on(bg_check) {
+            icon_color = Color::WHITE;
+            text_color = Color::WHITE;
+        } else {
+            icon_color = Color::BLACK;
+            text_color = Color::BLACK;
+        }
+    }
+
+    appearance.background = Some(background.into());
+    appearance.icon_color = Some(icon_color);
+    appearance.text_color = Some(text_color);
+
     if focused && accent {
         appearance.outline_width = 1.0;
         appearance.outline_color = Color::from(cosmic.accent_color());
         appearance.border_width = 2.0;
         appearance.border_color = Color::TRANSPARENT;
+    } else if focused {
+        appearance.border_width = 2.0;
+        appearance.border_color = Color::from(cosmic.accent_color());
     }
+
     if condensed_radius {
         appearance.border_radius = cosmic.radius_xs().into();
     } else {
