@@ -3,9 +3,9 @@ use crate::config::IconSizes;
 use crate::spawn_detached::spawn_detached;
 use crate::{archive, fl, tab};
 use cosmic::iced::futures::channel::mpsc::Sender;
-use cosmic::iced::futures::{self, SinkExt, StreamExt, stream};
+use cosmic::iced::futures::{self, FutureExt, SinkExt, StreamExt, TryFutureExt, stream};
 use std::borrow::Cow;
-use std::fmt::Formatter;
+use std::fmt::{self, Display, Formatter};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -213,30 +213,65 @@ async fn copy_or_move(
     .map_err(wrap_compio_spawn_error)?
 }
 
+/// Sync files and dirs to disk returning all errors.
 pub async fn sync_to_disk(
     written_files: Vec<PathBuf>,
     target_dirs: std::collections::HashSet<PathBuf>,
-) {
-    // Sync files to disk
-    stream::iter(written_files.into_iter().map(|path| async move {
-        if let Ok(file) = compio::fs::OpenOptions::new().write(true).open(&path).await {
-            let _ = file.sync_all().await;
+) -> Result<(), SyncError> {
+    // Sync files and dirs to disk.
+    // Each future is attempted to be driven to conclusion which is why the results are collected
+    // rather than using try_collect(). try_collect() short circuits.
+    let results: Vec<_> = stream::iter(written_files.into_iter().map(|path| {
+        async move {
+            compio::fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .and_then(|file| async move { file.sync_all().await })
+                .await
+                .err()
+                .map(|e| (e, path))
         }
+        .boxed_local()
     }))
+    .chain(stream::iter(target_dirs.into_iter().map(|path| {
+        async move {
+            compio::fs::OpenOptions::new()
+                .read(true)
+                .open(&path)
+                .and_then(|dir| async move { dir.sync_all().await })
+                .await
+                .err()
+                .map(|e| (e, path))
+        }
+        .boxed_local()
+    })))
     .buffer_unordered(32)
-    .collect::<()>()
+    .filter_map(futures::future::ready)
+    .collect()
     .await;
 
-    // Sync directories to disk
-    stream::iter(target_dirs.into_iter().map(|path| async move {
-        if let Ok(dir) = compio::fs::OpenOptions::new().read(true).open(&path).await {
-            let _ = dir.sync_all().await;
-        }
-    }))
-    .buffer_unordered(16)
-    .collect::<()>()
-    .await;
+    if results.is_empty() {
+        Ok(())
+    } else {
+        Err(SyncError(results.into_boxed_slice()))
+    }
 }
+
+#[derive(Debug)]
+pub struct SyncError(pub Box<[(io::Error, PathBuf)]>);
+
+impl Display for SyncError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        writeln!(f, "failed to sync files to disk\n")?;
+        for (e, path) in &self.0 {
+            writeln!(f, "{e}: {path:?}")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl std::error::Error for SyncError {}
 
 pub fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     // List of compound extensions to check
@@ -1015,7 +1050,9 @@ impl Operation {
 
                     let (op_sel, written_files, target_dirs) = extracted;
                     if !written_files.is_empty() || !target_dirs.is_empty() {
-                        sync_to_disk(written_files, target_dirs).await;
+                        sync_to_disk(written_files, target_dirs)
+                            .await
+                            .map_err(|e| OperationError::from_msg(e.to_string()))?;
                     }
 
                     Ok::<_, OperationError>(op_sel)
