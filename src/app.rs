@@ -3208,6 +3208,7 @@ impl Application for App {
                         }
                         DialogPage::OpenWith {
                             path,
+                            uri_opt,
                             mime,
                             selected,
                             search_app_name,
@@ -3223,8 +3224,9 @@ impl Application for App {
                             });
 
                             if let Some((app, _)) = available_apps.get(selected) {
-                                if let Some(mut command) =
-                                    app.command(&[&path], None).and_then(|v| v.into_iter().next())
+                                if let Some(mut command) = app
+                                    .command(&[&path], Some(&[uri_opt.as_deref()]))
+                                    .and_then(|v| v.into_iter().next())
                                 {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
