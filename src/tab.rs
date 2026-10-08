@@ -1780,7 +1780,7 @@ pub enum Command {
     ExecEntryAction(cosmic::desktop::DesktopEntryData, usize),
     Iced(TaskWrapper),
     OpenFile(Vec<OpenTarget>),
-    OpenInNewTab(PathBuf),
+    OpenInNewTab(Location),
     OpenInNewWindow(PathBuf),
     OpenTrash,
     Preview(PreviewKind),
@@ -1813,7 +1813,7 @@ pub enum Message {
     EditLocationEnable,
     EditLocationSubmit,
     EditLocationTab,
-    OpenInNewTab(PathBuf),
+    OpenInNewTab(Location),
     ClearRecents,
     EmptyTrash,
     #[cfg(feature = "desktop")]
@@ -3811,10 +3811,23 @@ impl Tab {
                         .and_then(|path| path.ancestors().nth(ancestor_index))
                         .map(Path::to_path_buf)
                 };
+                let location_for_index = |ancestor_index| {
+                    self.location
+                        .path_opt()
+                        .and_then(|path| path.ancestors().nth(ancestor_index))
+                        .map(|path| match &self.location {
+                            Location::Network(uri, display_name, _) => Location::Network(
+                                uri.clone(),
+                                display_name.clone(),
+                                Some(path.to_path_buf()),
+                            ),
+                            _ => self.location.with_path(path.to_path_buf()),
+                        })
+                };
                 match action {
                     LocationMenuAction::OpenInNewTab(ancestor_index) => {
-                        if let Some(path) = path_for_index(ancestor_index) {
-                            commands.push(Command::OpenInNewTab(path));
+                        if let Some(location) = location_for_index(ancestor_index) {
+                            commands.push(Command::OpenInNewTab(location));
                         }
                     }
                     LocationMenuAction::OpenInNewWindow(ancestor_index) => {
@@ -4367,7 +4380,7 @@ impl Tab {
                     None => {
                         enum ResolveResult {
                             Open(Option<OpenTarget>),
-                            OpenInTab(Option<PathBuf>),
+                            OpenInTab(Option<Location>),
                             OpenTrash,
                             OpenProperties,
                             Cd(Location),
@@ -4395,7 +4408,7 @@ impl Tab {
                                         if is_only_one_selected {
                                             ResolveResult::Cd(location.clone())
                                         } else {
-                                            ResolveResult::OpenInTab(path_opt.cloned())
+                                            ResolveResult::OpenInTab(Some(location.clone()))
                                         }
                                     }
                                     Mode::Desktop => match location {
@@ -4427,8 +4440,8 @@ impl Tab {
                             for item in items.iter() {
                                 match resolve_item(item, &self.mode, selected_count == 1) {
                                     ResolveResult::Open(Some(target)) => open_files.push(target),
-                                    ResolveResult::OpenInTab(Some(p)) => {
-                                        commands.push(Command::OpenInNewTab(p))
+                                    ResolveResult::OpenInTab(Some(location)) => {
+                                        commands.push(Command::OpenInNewTab(location))
                                     }
                                     ResolveResult::Cd(loc) => cd = Some(loc),
                                     ResolveResult::OpenTrash => commands.push(Command::OpenTrash),
@@ -4489,8 +4502,9 @@ impl Tab {
                     {
                         if let Some(path) = clicked_item.path_opt() {
                             if clicked_item.metadata.is_dir() {
-                                //cd = Some(Location::Path(path.clone()));
-                                commands.push(Command::OpenInNewTab(path.clone()));
+                                if let Some(location) = clicked_item.location_opt.clone() {
+                                    commands.push(Command::OpenInNewTab(location));
+                                }
                             } else {
                                 commands.push(Command::OpenFile(vec![OpenTarget {
                                     path: path.clone(),
@@ -5542,7 +5556,8 @@ impl Tab {
                 }
                 return column.into();
             }
-        } else if let Some(path) = self.location.path_opt() {
+        } else if self.location.path_opt().is_some() {
+            let location = self.location.clone();
             row = row.push(
                 crate::mouse_area::MouseArea::new(
                     widget::button::custom(widget::icon::from_name("edit-symbolic").size(16))
@@ -5550,7 +5565,7 @@ impl Tab {
                         .class(theme::Button::Icon)
                         .on_press(Message::EditLocation(Some(self.location.clone().into()))),
                 )
-                .on_middle_press(move |_| Message::OpenInNewTab(path.clone())),
+                .on_middle_press(move |_| Message::OpenInNewTab(location.clone())),
             );
             w += f32::from(space_xxs).mul_add(2.0, 16.0);
         }
@@ -5621,8 +5636,11 @@ impl Tab {
                     );
 
                     let mouse_area = if let Location::Path(_) = &self.location {
+                        let middle_click_location = location.clone();
                         mouse_area
-                            .on_middle_press(move |_| Message::OpenInNewTab(ancestor.to_path_buf()))
+                            .on_middle_press(move |_| {
+                                Message::OpenInNewTab(middle_click_location.clone())
+                            })
                     } else {
                         mouse_area
                     };

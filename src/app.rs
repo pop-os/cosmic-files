@@ -4594,8 +4594,8 @@ impl Application for App {
                             }));
                         }
                         tab::Command::OpenFile(paths) => commands.push(self.open_file(&paths)),
-                        tab::Command::OpenInNewTab(path) => {
-                            commands.push(self.open_tab(Location::Path(path), false, None));
+                        tab::Command::OpenInNewTab(location) => {
+                            commands.push(self.open_tab(location, false, None));
                         }
                         tab::Command::OpenInNewWindow(path) => match env::current_exe() {
                             Ok(exe) => match process::Command::new(&exe).arg(path).spawn() {
