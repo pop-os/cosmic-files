@@ -85,10 +85,12 @@ pub fn exec_to_command(
         .enumerate()
         .map(|(index, path)| (index, Some(path.as_ref())))
         // Add a single `None` if no path was given.
-        .chain(std::iter::repeat_n(
-            (0, None),
-            if path_opt.is_empty() { 1 } else { 0 },
-        ));
+        .chain(std::iter::once((0, None)))
+        .take(if path_opt.is_empty() {
+            1
+        } else {
+            path_opt.len()
+        });
 
     for (index, path) in paths {
         let mut batch_process = false;
