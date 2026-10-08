@@ -3222,8 +3222,9 @@ impl Application for App {
                             });
 
                             if let Some((app, _)) = available_apps.get(selected) {
+                                let uris = [uri_opt.as_deref()];
                                 if let Some(mut command) = app
-                                    .command(&[&path], Some(&[uri_opt.as_deref()]))
+                                    .command(&[&path], Some(&uris))
                                     .and_then(|v| v.into_iter().next())
                                 {
                                     match spawn_detached(&mut command) {
