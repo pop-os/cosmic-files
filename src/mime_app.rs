@@ -128,13 +128,14 @@ pub fn exec_to_command(
                                 batch_process = true;
                                 field_code_used = true;
 
-                                let value = uri_opt
+                                if let Some(uri) = uri_opt
                                     .and_then(|uris| uris.get(index))
                                     .and_then(Option::as_deref)
-                                    .map(str::as_bytes)
-                                    .unwrap_or(path.as_bytes());
-
-                                new_argument.push_str(value);
+                                {
+                                    new_argument.push_str(uri.as_bytes());
+                                } else {
+                                    new_argument.push_str(path.as_bytes());
+                                }
                             }
                         }
 
