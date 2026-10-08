@@ -5045,15 +5045,12 @@ impl Application for App {
                         .push_dialog(DialogPage::EmptyTrash, Some(EMPTY_TRASH_BUTTON_ID.clone()));
                 }
                 NavMenuAction::Open(entity) => {
-                    if let Some(path) = self
-                        .nav_model
-                        .data::<Location>(entity)
-                        .and_then(Location::path_opt)
-                        .cloned()
+                    if let Some(location) = self.nav_model.data::<Location>(entity)
+                        && let Some(path) = location.path_opt()
                     {
                         return self.open_file(&[tab::OpenTarget {
-                            path,
-                            uri_opt: None,
+                            path: path.clone(),
+                            uri_opt: location.uri_opt().map(String::from),
                         }]);
                     }
                 }
