@@ -789,34 +789,34 @@ impl App {
         }
     }
 
-    fn open_file(&mut self, paths: &[tab::OpenTarget]) -> Task<Message> {
+    fn open_file(&mut self, targets: &[tab::OpenTarget]) -> Task<Message> {
         let mut tasks = Vec::new();
 
         // Associate all paths to its MIME type
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
-        let mut groups: FxHashMap<Mime, Vec<&tab::OpenTarget>> = FxHashMap::default();
+        let mut groups: FxHashMap<Mime, Vec<tab::OpenTarget>> = FxHashMap::default();
         let mut all_archives = true;
         let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
-        for (mime, target) in paths.iter().map(|target| {
-            (
-                mime_icon::mime_for_path(target, None, false),
-                target,
-            )
-        }) {
+        for target in targets {
+            let mime = mime_icon::mime_for_path(&target.path, None, false);
+
             if all_archives && !supported_archive_types.iter().copied().any(|t| mime == t) {
                 all_archives = false;
             }
-            groups.entry(mime).or_default().push(target);
+            groups.entry(mime).or_default().push(target.clone());
         }
 
         if all_archives {
             // Use extract to dialog if all selected paths are supported archives
-            return self.extract_to(paths);
+            let paths: Vec<&PathBuf> = targets.iter().map(|target| &target.path).collect();
+            return self.extract_to(&paths);
         }
 
-        'outer: for (mime, paths) in groups {
-            log::debug!("Attempting to launch app\n\tfor: {mime}\n\twith: {paths:?}");
+        'outer: for (mime, targets) in groups {
+            log::debug!("Attempting to launch app\n\tfor: {mime}\n\twith: {targets:?}");
+
+            let paths: Vec<PathBuf> = targets.iter().map(|target| target.path.clone()).collect();
 
             // First launch apps that can be launched directly
             if mime == "application/x-desktop" {
@@ -829,21 +829,19 @@ impl App {
             } else if mime == "application/x-executable" || mime == "application/vnd.appimage" {
                 // Try opening executable
                 for path in paths {
-                    let mut command = std::process::Command::new(&path.path);
+                    let mut command = std::process::Command::new(&path);
                     match spawn_detached(&mut command) {
                         Ok(()) => {}
                         Err(err) => match err.kind() {
                             io::ErrorKind::PermissionDenied => {
                                 // If permission is denied, try marking as executable, then running
                                 tasks.push(self.push_dialog(
-                                    DialogPage::SetExecutableAndLaunch {
-                                        path: path.path.clone(),
-                                    },
+                                    DialogPage::SetExecutableAndLaunch { path },
                                     Some(SET_EXECUTABLE_AND_LAUNCH_CONFIRM_BUTTON_ID.clone()),
                                 ));
                             }
                             _ => {
-                                log::warn!("failed to execute {}: {}", path.path.display(), err);
+                                log::warn!("failed to execute {}: {}", path.display(), err);
                             }
                         },
                     }
@@ -852,14 +850,14 @@ impl App {
             }
 
             // Try mime apps, which should be faster than xdg-open
-            if self.launch_from_mime_cache(&mime, &paths) {
+            if self.launch_from_mime_cache(&mime, &targets) {
                 continue;
             }
 
             // loop through subclasses if available
             if let Some(mime_sub_classes) = mime_icon::parent_mime_types(&mime) {
                 for sub_class in mime_sub_classes {
-                    if self.launch_from_mime_cache(&sub_class, &paths) {
+                    if self.launch_from_mime_cache(&sub_class, &targets) {
                         continue 'outer;
                     }
                 }
@@ -871,7 +869,7 @@ impl App {
                     Ok(()) => {
                         if self.config.show_recents {
                             let _ = recently_used_xbel::update_recently_used(
-                                &path.path,
+                                &path,
                                 Self::APP_ID.to_string(),
                                 "cosmic-files".to_string(),
                                 None,
@@ -879,7 +877,7 @@ impl App {
                         }
                     }
                     Err(err) => {
-                        log::warn!("failed to open {}: {}", path.path.display(), err);
+                        log::warn!("failed to open {}: {}", path.display(), err);
                     }
                 }
             }
@@ -942,7 +940,7 @@ impl App {
     fn launch_from_mime_cache(
         &self,
         mime: &Mime,
-        targets: &[&tab::OpenTarget],
+        targets: &[tab::OpenTarget],
     ) -> bool {
         let paths: Vec<&std::ffi::OsStr> = targets
             .iter()

@@ -1746,7 +1746,7 @@ impl fmt::Debug for TaskWrapper {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OpenTarget {
     pub path: PathBuf,
     pub uri_opt: Option<String>,
