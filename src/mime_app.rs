@@ -860,23 +860,34 @@ mod tests {
     fn mult_path_U_field_code() {
         let exec = "/usr/bin/mpv %U";
         let paths = [
-            "frieren01.mkv",
-            "rtmp://example.org/this/video/doesnt/exist.avi",
+            "/run/user/1000/gvfs/smb-share:server=server.example,share=files$/one.xlsx",
+            "/run/user/1000/gvfs/smb-share:server=server.example,share=files$/two.xlsx",
         ];
-        let commands = exec_to_command(exec, "mult_path_U_field_code", None, &paths, None)
-            .expect("Should parse valid exec");
+        let uris = [
+            Some("smb://server.example/files$/one.xlsx"),
+            Some("smb://server.example/files$/two.xlsx"),
+        ];
+
+        let commands = exec_to_command(
+            exec,
+            "mult_path_U_field_code",
+            None,
+            &paths,
+            Some(&uris),
+        )
+        .expect("Should parse valid exec");
 
         assert_eq!(1, commands.len());
         let command = commands.first().unwrap();
-        assert_eq!(paths.len(), command.get_args().count());
 
         assert_eq!("/usr/bin/mpv", command.get_program().to_str().unwrap());
-        assert!(
-            paths
-                .iter()
-                .zip(command.get_args())
-                .all(|(&expected, actual)| expected == actual.to_string_lossy())
-        );
+
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(uris.len(), args.len());
+
+        for (expected, actual) in uris.iter().zip(args) {
+            assert_eq!(expected.unwrap(), actual.to_str().unwrap());
+        }
     }
 
     #[test]
