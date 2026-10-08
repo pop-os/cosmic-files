@@ -153,13 +153,14 @@ pub fn exec_to_command(
                                 field_code_used = true;
 
                                 for (path_index, path) in path_opt.iter().enumerate() {
-                                    let value = uri_opt
+                                    if let Some(uri) = uri_opt
                                         .and_then(|uris| uris.get(path_index))
                                         .and_then(Option::as_deref)
-                                        .map(str::as_bytes)
-                                        .unwrap_or_else(|| path.as_ref().as_bytes());
-
-                                    args.push(BString::new(value.to_owned()));
+                                    {
+                                        args.push(BString::new(uri.as_bytes().to_owned()));
+                                    } else {
+                                        args.push(BString::new(path.as_ref().as_bytes().to_owned()));
+                                    }
                                 }
                             }
                         }
