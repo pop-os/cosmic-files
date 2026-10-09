@@ -206,7 +206,7 @@ username = Benutzername
 
 cancelled = Abgebrochen
 edit-history = Verlauf bearbeiten
-history = Verlauf
+history = Verlauf ...
 no-history = Keine Einträge im Verlauf.
 pending = Ausstehend
 progress = { $percent } %
@@ -304,7 +304,7 @@ default-app = { $name } (Standard)
 
 ## Details anzeigen
 
-show-details = Details anzeigen
+show-details = Details anzeigen ...
 type = Typ: { $mime }
 items = Elemente: { $items }
 item-size = Größe: { $size }
@@ -341,7 +341,7 @@ new-folder = Neuer Ordner ...
 open-in-terminal = Im Terminal öffnen
 move-to-trash = In den Papierkorb verschieben
 restore-from-trash = Aus dem Papierkorb wiederherstellen
-remove-from-sidebar = Von der Seitenleiste entfernen
+remove-from-sidebar = Aus der Seitenleiste entfernen
 sort-by-name = Nach Name sortieren
 sort-by-modified = Nach Änderung sortieren
 sort-by-size = Nach Größe sortieren
@@ -441,3 +441,6 @@ rename-confirm = Umbenennen
 checksum = { $kind } Prüfsumme
 calculate = Berechnen
 error = Fehler
+sidebar-label = Bezeichnung der Seitenleiste
+search-application = Nach App-Name suchen
+change-sidebar-label = Bezeichnung der Seitenleiste ändern

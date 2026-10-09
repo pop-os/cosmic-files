@@ -142,7 +142,7 @@ username = Käyttäjätunnus
 ## Operations
 
 edit-history = Muokkaa historiaa
-history = Historia
+history = Historia…
 no-history = Historia on tyhjä.
 pending = Jonossa
 failed = Epäonnistuneet
@@ -215,7 +215,7 @@ default-app = { $name } (oletus)
 
 ## Show details
 
-show-details = Näytä yksityiskohdat
+show-details = Näytä yksityiskohdat…
 
 ## Settings
 
@@ -418,3 +418,6 @@ rename-confirm = Nimeä uudelleen
 checksum = { $kind }-tarkistussumma
 calculate = Laske
 error = Virhe
+search-application = Hae sovelluksen nimellä
+sidebar-label = Sivupalkin nimike
+change-sidebar-label = Muuta sivupalkin nimikettä
