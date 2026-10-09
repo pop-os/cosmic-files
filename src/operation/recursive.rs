@@ -340,6 +340,20 @@ impl Op {
         if self.skipped.normal.get() || (self.is_cleanup && self.skipped.cleanup.get()) {
             return Ok(true);
         }
+
+        let result = self.run_inner(ctx, progress).await;
+        if result.is_err() {
+            self.skipped.cleanup.set(true);
+        }
+
+        result
+    }
+
+    async fn run_inner(
+        &mut self,
+        ctx: &mut Context,
+        progress: Progress,
+    ) -> Result<bool, Box<dyn Error>> {
         match self.kind {
             OpKind::Copy => {
                 crate::operation::actively_writing_add(self.to.clone());
@@ -353,11 +367,6 @@ impl Op {
                 return result;
             }
             OpKind::Move { cross_device_copy } => {
-                // Do not clean up if cross_device_copy is set
-                if cross_device_copy {
-                    self.skipped.cleanup.set(true);
-                }
-
                 // Remove `to` if overwriting and it is an existing file
                 if self.to.is_file() {
                     match ctx.replace(self).await? {
@@ -384,6 +393,7 @@ impl Op {
                                 // Do not clean up if cross_device_copy is set
                                 self.skipped.cleanup.set(true);
                             }
+
                             // Try standard copy if hard link fails with cross device error
                             let mut copy_op = Self {
                                 kind: OpKind::Copy,
@@ -434,6 +444,22 @@ impl Op {
             }
         }
         Ok(true)
+    }
+
+    async fn run_inner_copy(
+        &mut self,
+        ctx: &mut Context,
+        progress: Progress,
+    ) -> Result<bool, Box<dyn Error>> {
+        crate::operation::actively_writing_add(self.to.clone());
+        let result = self.copy(ctx, progress).await;
+
+        if result.is_err() {
+            _ = compio::fs::remove_file(&self.to).await;
+        }
+
+        crate::operation::actively_writing_remove(&self.to);
+        result
     }
 
     async fn copy(
