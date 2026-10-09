@@ -603,7 +603,10 @@ impl Op {
             }
         }
 
-        _ = to_file.close().await;
+        to_file
+            .close()
+            .await
+            .context("failed to close copied file")?;
 
         Ok(true)
     }
