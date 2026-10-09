@@ -355,17 +355,7 @@ impl Op {
         progress: Progress,
     ) -> Result<bool, Box<dyn Error>> {
         match self.kind {
-            OpKind::Copy => {
-                crate::operation::actively_writing_add(self.to.clone());
-                let result = self.copy(ctx, progress).await;
-
-                if result.is_err() {
-                    _ = compio::fs::remove_file(&self.to).await;
-                }
-
-                crate::operation::actively_writing_remove(&self.to);
-                return result;
-            }
+            OpKind::Copy => return self.run_inner_copy(ctx, progress).await,
             OpKind::Move { cross_device_copy } => {
                 // Remove `to` if overwriting and it is an existing file
                 if self.to.is_file() {
@@ -395,14 +385,7 @@ impl Op {
                             }
 
                             // Try standard copy if hard link fails with cross device error
-                            let mut copy_op = Self {
-                                kind: OpKind::Copy,
-                                from: self.from.clone(),
-                                to: self.to.clone(),
-                                skipped: self.skipped.clone(),
-                                is_cleanup: self.is_cleanup,
-                            };
-                            return Box::pin(copy_op.run(ctx, progress)).await;
+                            return self.run_inner_copy(ctx, progress).await;
                         }
                         return Err(err.into());
                     }
