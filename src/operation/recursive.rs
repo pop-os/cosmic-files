@@ -82,7 +82,6 @@ impl Context {
     ) -> Result<bool, OperationError> {
         let mut ops = Vec::new();
         let mut cleanup_ops = Vec::new();
-        let mut written_files = Vec::new();
         let mut target_dirs = std::collections::HashSet::new();
         for (from_parent, to_parent) in from_to_pairs {
             self.controller
@@ -218,15 +217,6 @@ impl Context {
                     &self.controller,
                 )
             })? {
-                if matches!(
-                    op.kind,
-                    OpKind::Copy
-                        | OpKind::Move {
-                            cross_device_copy: true
-                        }
-                ) {
-                    written_files.push(op.to.clone());
-                }
                 // The from path is ignored in the operation selection if it is a top level item
                 if self.op_sel.ignored.contains(&op.from) {
                     // So add the to path to the selection
@@ -238,8 +228,8 @@ impl Context {
             }
         }
 
-        // Flush files to disk
-        sync_to_disk(written_files, target_dirs).await;
+        // Apply fsync to directories containing files that were modified
+        sync_to_disk(Vec::new(), target_dirs).await;
 
         Ok(true)
     }
@@ -340,24 +330,23 @@ impl Op {
         if self.skipped.normal.get() || (self.is_cleanup && self.skipped.cleanup.get()) {
             return Ok(true);
         }
+
+        let result = self.run_inner(ctx, progress).await;
+        if result.is_err() {
+            self.skipped.cleanup.set(true);
+        }
+
+        result
+    }
+
+    async fn run_inner(
+        &mut self,
+        ctx: &mut Context,
+        progress: Progress,
+    ) -> Result<bool, Box<dyn Error>> {
         match self.kind {
-            OpKind::Copy => {
-                crate::operation::actively_writing_add(self.to.clone());
-                let result = self.copy(ctx, progress).await;
-
-                if result.is_err() {
-                    _ = compio::fs::remove_file(&self.to).await;
-                }
-
-                crate::operation::actively_writing_remove(&self.to);
-                return result;
-            }
+            OpKind::Copy => return self.run_inner_copy(ctx, progress).await,
             OpKind::Move { cross_device_copy } => {
-                // Do not clean up if cross_device_copy is set
-                if cross_device_copy {
-                    self.skipped.cleanup.set(true);
-                }
-
                 // Remove `to` if overwriting and it is an existing file
                 if self.to.is_file() {
                     match ctx.replace(self).await? {
@@ -384,15 +373,9 @@ impl Op {
                                 // Do not clean up if cross_device_copy is set
                                 self.skipped.cleanup.set(true);
                             }
+
                             // Try standard copy if hard link fails with cross device error
-                            let mut copy_op = Self {
-                                kind: OpKind::Copy,
-                                from: self.from.clone(),
-                                to: self.to.clone(),
-                                skipped: self.skipped.clone(),
-                                is_cleanup: self.is_cleanup,
-                            };
-                            return Box::pin(copy_op.run(ctx, progress)).await;
+                            return self.run_inner_copy(ctx, progress).await;
                         }
                         return Err(err.into());
                     }
@@ -434,6 +417,22 @@ impl Op {
             }
         }
         Ok(true)
+    }
+
+    async fn run_inner_copy(
+        &mut self,
+        ctx: &mut Context,
+        progress: Progress,
+    ) -> Result<bool, Box<dyn Error>> {
+        crate::operation::actively_writing_add(self.to.clone());
+        let result = self.copy(ctx, progress).await;
+
+        if result.is_err() {
+            _ = compio::fs::remove_file(&self.to).await;
+        }
+
+        crate::operation::actively_writing_remove(&self.to);
+        result
     }
 
     async fn copy(
@@ -578,6 +577,8 @@ impl Op {
 
         ctx.buf = buf_in;
 
+        to_file.sync_data().await.context("failed to sync data")?;
+
         if let Some(metadata) = metadata.as_ref() {
             let mut times = fs::FileTimes::new();
             if let Ok(time) = metadata.modified() {
@@ -602,7 +603,10 @@ impl Op {
             }
         }
 
-        _ = to_file.close().await;
+        to_file
+            .close()
+            .await
+            .context("failed to close copied file")?;
 
         Ok(true)
     }
