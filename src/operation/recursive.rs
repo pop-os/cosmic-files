@@ -82,7 +82,6 @@ impl Context {
     ) -> Result<bool, OperationError> {
         let mut ops = Vec::new();
         let mut cleanup_ops = Vec::new();
-        let mut written_files = Vec::new();
         let mut target_dirs = std::collections::HashSet::new();
         for (from_parent, to_parent) in from_to_pairs {
             self.controller
@@ -218,15 +217,6 @@ impl Context {
                     &self.controller,
                 )
             })? {
-                if matches!(
-                    op.kind,
-                    OpKind::Copy
-                        | OpKind::Move {
-                            cross_device_copy: true
-                        }
-                ) {
-                    written_files.push(op.to.clone());
-                }
                 // The from path is ignored in the operation selection if it is a top level item
                 if self.op_sel.ignored.contains(&op.from) {
                     // So add the to path to the selection
@@ -238,8 +228,8 @@ impl Context {
             }
         }
 
-        // Flush files to disk
-        sync_to_disk(written_files, target_dirs).await;
+        // Apply fsync to directories containing files that were modified
+        sync_to_disk(Vec::new(), target_dirs).await;
 
         Ok(true)
     }
@@ -586,6 +576,8 @@ impl Op {
         }
 
         ctx.buf = buf_in;
+
+        to_file.sync_data().await.context("failed to sync data")?;
 
         if let Some(metadata) = metadata.as_ref() {
             let mut times = fs::FileTimes::new();
