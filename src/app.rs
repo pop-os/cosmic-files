@@ -4749,10 +4749,7 @@ impl Application for App {
                 return self.update_config();
             }
             Message::ToggleContextPage(context_page) => {
-                //TODO: ensure context menus are closed
-                if self.context_page == context_page
-                    || matches!(self.context_page, ContextPage::Preview(_, _))
-                {
+                if self.context_page == context_page {
                     self.set_show_context(!self.core.window.show_context);
                 } else {
                     self.set_show_context(true);
