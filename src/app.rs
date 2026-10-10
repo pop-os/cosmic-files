@@ -4763,6 +4763,8 @@ impl Application for App {
                     return cosmic::task::message(cosmic::action::app(Message::SetShowDetails(
                         self.core.window.show_context,
                     )));
+                } else {
+                    self.config.show_details = false;
                 }
             }
             Message::Undo(_id) => {
