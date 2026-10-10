@@ -4174,8 +4174,10 @@ impl Application for App {
             Message::Preview(entity_opt) => {
                 match self.mode {
                     Mode::App => {
+                        let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                         let show_details = !self.config.show_details;
-                        self.context_page = ContextPage::Preview(None, PreviewKind::Selected);
+                        self.context_page =
+                            ContextPage::Preview(Some(entity), PreviewKind::Selected);
                         self.core.window.show_context = show_details;
                         return cosmic::task::message(Message::SetShowDetails(show_details));
                     }
