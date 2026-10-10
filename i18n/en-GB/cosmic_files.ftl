@@ -98,3 +98,17 @@ copy-to-button-label = Copy
 move-to-title = Select move destination
 move-to-button-label = Move
 context-action = Context action
+related-apps = Related applications
+rename-folder = Rename folder
+rename-file = Rename file
+permanently-delete-warning = { $target } will be permanently deleted. This action can't be undone.
+permanently-delete-question = Permanently delete?
+replace-title = "{ $filename }" already exists in this location
+context-action-confirm-title = Run "{ $name }"?
+context-action-confirm-warning =
+    This will run on { $items } { $items ->
+        [one] item
+       *[other] items
+    }.
+selected-items = The { $items } selected items
+rename-confirm = Rename

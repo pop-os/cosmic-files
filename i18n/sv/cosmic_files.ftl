@@ -161,7 +161,7 @@ remember-password = Kom ihåg lösenord
 
 cancelled = Avbruten
 edit-history = Redigera historik
-history = Historik
+history = Historik...
 no-history = Inga objekt i historiken.
 pending = Väntar
 progress = { $percent }%
@@ -237,7 +237,7 @@ default-app = { $name } (standard)
 
 ## Visa detaljer
 
-show-details = Visa detaljer
+show-details = Visa detaljer...
 type = Typ: { $mime }
 items = Objekt: { $items }
 item-size = Storlek: { $size }
