@@ -12,6 +12,7 @@ use compio::io::{AsyncReadAt, AsyncWriteAt};
 use cosmic::iced::futures;
 use futures::{FutureExt, StreamExt};
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
 use std::future::Future;
@@ -37,6 +38,41 @@ pub enum GioCopyError {
 pub enum Method {
     Copy,
     Move { cross_device_copy: bool },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum OpFlow {
+    Continue,
+    Skip,
+    Cancelled,
+}
+
+struct OpResult {
+    flow: OpFlow,
+    sync_file: Option<compio::fs::File>,
+}
+
+impl OpResult {
+    const fn continue_with(file: Option<compio::fs::File>) -> Self {
+        Self {
+            flow: OpFlow::Continue,
+            sync_file: file,
+        }
+    }
+
+    const fn skip() -> Self {
+        Self {
+            flow: OpFlow::Skip,
+            sync_file: None,
+        }
+    }
+
+    const fn cancelled() -> Self {
+        Self {
+            flow: OpFlow::Cancelled,
+            sync_file: None,
+        }
+    }
 }
 
 pub struct Context {
@@ -79,11 +115,11 @@ impl Context {
         &mut self,
         from_to_pairs: impl IntoIterator<Item = (PathBuf, PathBuf)>,
         method: Method,
-    ) -> Result<bool, OperationError> {
+    ) -> Result<OpFlow, OperationError> {
         let mut ops = Vec::new();
         let mut cleanup_ops = Vec::new();
-        let mut written_files = Vec::new();
-        let mut target_dirs = std::collections::HashSet::new();
+        let mut dirty_fds = Vec::new();
+        let mut dirty_dirs = HashSet::new();
         for (from_parent, to_parent) in from_to_pairs {
             self.controller
                 .check()
@@ -169,7 +205,7 @@ impl Context {
                     cleanup_ops.push(cleanup_op);
                 }
                 if let Some(parent) = op.to.parent() {
-                    target_dirs.insert(parent.to_path_buf());
+                    dirty_dirs.insert(parent.to_path_buf());
                 }
                 ops.push(op);
             }
@@ -206,7 +242,7 @@ impl Context {
                 total_bytes: None,
             };
             (self.on_progress)(&op, &progress);
-            if op.run(self, progress).await.map_err(|err| {
+            let result = op.run(self, progress).await.map_err(|err| {
                 OperationError::from_err(
                     format!(
                         "failed to {:?} {} to {}: {}",
@@ -217,33 +253,49 @@ impl Context {
                     ),
                     &self.controller,
                 )
-            })? {
-                if matches!(
-                    op.kind,
-                    OpKind::Copy
-                        | OpKind::Move {
-                            cross_device_copy: true
-                        }
-                ) {
-                    written_files.push(op.to.clone());
+            })?;
+            let OpResult { flow, sync_file } = result;
+
+            if let Some(file) = sync_file {
+                dirty_fds.push((file, op.to.clone()));
+            }
+
+            match flow {
+                OpFlow::Continue | OpFlow::Skip => {
+                    // The from path is ignored in the operation selection if it is a top level item
+                    if self.op_sel.ignored.contains(&op.from) {
+                        // So add the to path to the selection
+                        self.op_sel.selected.push(op.to);
+                    }
                 }
-                // The from path is ignored in the operation selection if it is a top level item
-                if self.op_sel.ignored.contains(&op.from) {
-                    // So add the to path to the selection
-                    self.op_sel.selected.push(op.to);
-                }
-            } else {
-                // Cancelled
-                return Ok(false);
+                OpFlow::Cancelled => return Ok(OpFlow::Cancelled),
             }
         }
 
-        // Flush files to disk
-        sync_to_disk(written_files, target_dirs)
+        for path in dirty_dirs {
+            let dir = compio::fs::OpenOptions::new()
+                .read(true)
+                .open(&path)
+                .await
+                .map_err(|err| {
+                    OperationError::from_err(
+                        format!(
+                            "failed to open parent directory to sync {}: {}",
+                            path.display(),
+                            err
+                        ),
+                        &self.controller,
+                    )
+                })?;
+            dirty_fds.push((dir, path));
+        }
+
+        // Flush dirty descriptors to disk
+        sync_to_disk(dirty_fds)
             .await
             .map_err(|e| OperationError::from_err(e, &self.controller))?;
 
-        Ok(true)
+        Ok(OpFlow::Continue)
     }
 
     pub fn on_progress<F: OnProgress>(mut self, f: F) -> Self {
@@ -256,7 +308,7 @@ impl Context {
         self
     }
 
-    async fn replace(&mut self, op: &Op) -> Result<ControlFlow<bool, PathBuf>, Box<dyn Error>> {
+    async fn replace(&mut self, op: &Op) -> Result<ControlFlow<OpResult, PathBuf>, Box<dyn Error>> {
         let replace_result = match self.replace_result_opt {
             Some(result) => result,
             None => (self.on_replace)(op, self.remaining_conflicts).await,
@@ -279,9 +331,9 @@ impl Context {
                     self.replace_result_opt = Some(replace_result);
                 }
                 op.skipped.normal.set(true);
-                Ok(ControlFlow::Break(true))
+                Ok(ControlFlow::Break(OpResult::skip()))
             }
-            ReplaceResult::Cancel => Ok(ControlFlow::Break(false)),
+            ReplaceResult::Cancel => Ok(ControlFlow::Break(OpResult::cancelled())),
         }
     }
 }
@@ -338,9 +390,13 @@ impl Op {
         })
     }
 
-    async fn run(&mut self, ctx: &mut Context, progress: Progress) -> Result<bool, Box<dyn Error>> {
+    async fn run(
+        &mut self,
+        ctx: &mut Context,
+        progress: Progress,
+    ) -> Result<OpResult, Box<dyn Error>> {
         if self.skipped.normal.get() || (self.is_cleanup && self.skipped.cleanup.get()) {
-            return Ok(true);
+            return Ok(OpResult::skip());
         }
         match self.kind {
             OpKind::Copy => {
@@ -366,9 +422,7 @@ impl Op {
                         ControlFlow::Continue(to) => {
                             self.to = to;
                         }
-                        ControlFlow::Break(ret) => {
-                            return Ok(ret);
-                        }
+                        ControlFlow::Break(flow) => return Ok(flow),
                     }
                 }
                 // This is atomic and ensures `to` is not created by any other process
@@ -416,9 +470,7 @@ impl Op {
                         ControlFlow::Continue(to) => {
                             self.to = to;
                         }
-                        ControlFlow::Break(ret) => {
-                            return Ok(ret);
-                        }
+                        ControlFlow::Break(flow) => return Ok(flow),
                     }
                 }
                 #[cfg(unix)]
@@ -435,23 +487,21 @@ impl Op {
                 }
             }
         }
-        Ok(true)
+        Ok(OpResult::continue_with(None))
     }
 
     async fn copy(
         &mut self,
         ctx: &mut Context,
         mut progress: Progress,
-    ) -> Result<bool, Box<dyn Error>> {
+    ) -> Result<OpResult, Box<dyn Error>> {
         // Remove `to` if overwriting and it is an existing file
         if self.to.is_file() {
             match ctx.replace(self).await? {
                 ControlFlow::Continue(to) => {
                     self.to = to;
                 }
-                ControlFlow::Break(ret) => {
-                    return Ok(ret);
-                }
+                ControlFlow::Break(flow) => return Ok(flow),
             }
         }
 
@@ -491,7 +541,7 @@ impl Op {
                 return self
                     .gio_file_copy(ctx, progress)
                     .await
-                    .map(|()| true)
+                    .map(|()| OpResult::continue_with(None))
                     .map_err(Into::into);
             }
         };
@@ -540,10 +590,11 @@ impl Op {
                 if let std::io::ErrorKind::Unsupported = why.kind() {
                     ctx.buf = buf_out;
                     _ = futures::future::join(from_file.close(), to_file.close()).await;
+                    // XXX: Needs updating for flushing data to disk.
                     return self
                         .gio_file_copy(ctx, progress)
                         .await
-                        .map(|_| true)
+                        .map(|_| OpResult::continue_with(None))
                         .map_err(Into::into);
                 }
 
@@ -604,9 +655,7 @@ impl Op {
             }
         }
 
-        _ = to_file.close().await;
-
-        Ok(true)
+        Ok(OpResult::continue_with(Some(to_file)))
     }
 
     /// Fallback mechanism in the event that unsupported I/O error errors occur.
