@@ -45,7 +45,7 @@ pub fn extract(
     new_dir: &Path,
     password: &Option<String>,
     controller: &Controller,
-) -> Result<(Vec<PathBuf>, HashSet<PathBuf>), OperationError> {
+) -> Result<Vec<fs::File>, OperationError> {
     let mime = mime_for_path(path, None, false);
     let password = password.as_deref();
     match mime.essence_str() {
@@ -112,7 +112,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     directory: P,
     password: Option<&str>,
     controller: Controller,
-) -> zip::result::ZipResult<(Vec<PathBuf>, HashSet<PathBuf>)> {
+) -> zip::result::ZipResult<Vec<std::fs::File>> {
     use std::ffi::OsString;
     use std::fs;
     use zip::result::ZipError;
@@ -143,7 +143,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
 
     let mut buffer = vec![0; 4 * 1024 * 1024];
     let total_files = archive.len();
-    let mut written_files = Vec::with_capacity(total_files);
+    let mut dirty_fds = Vec::with_capacity(total_files);
     let mut target_dirs = HashSet::new();
     #[cfg(unix)]
     let mut files_by_unix_mode = Vec::with_capacity(total_files);
@@ -227,7 +227,6 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
                 }
             }
 
-            written_files.push(outpath);
             continue;
         }
 
@@ -262,7 +261,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             files_by_unix_mode.push((outpath.clone(), mode));
         }
 
-        written_files.push(outpath);
+        dirty_fds.push(outfile);
     }
     #[cfg(unix)]
     {
@@ -285,7 +284,13 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         }
     }
 
-    Ok((written_files, target_dirs))
+    dirty_fds.reserve(target_dirs.len());
+    for dir in target_dirs {
+        let dir = fs::OpenOptions::new().read(true).open(dir)?;
+        dirty_fds.push(dir);
+    }
+
+    Ok(dirty_fds)
 }
 
 fn zip_date_time_to_system_time(date_time: zip::DateTime) -> Option<SystemTime> {
