@@ -3,9 +3,9 @@ use crate::config::IconSizes;
 use crate::spawn_detached::spawn_detached;
 use crate::{archive, fl, tab};
 use cosmic::iced::futures::channel::mpsc::Sender;
-use cosmic::iced::futures::{self, SinkExt, StreamExt, stream};
+use cosmic::iced::futures::{self, FutureExt, SinkExt, StreamExt, TryFutureExt, stream};
 use std::borrow::Cow;
-use std::fmt::Formatter;
+use std::fmt::{self, Display, Formatter};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -213,30 +213,47 @@ async fn copy_or_move(
     .map_err(wrap_compio_spawn_error)?
 }
 
-pub async fn sync_to_disk(
-    written_files: Vec<PathBuf>,
-    target_dirs: std::collections::HashSet<PathBuf>,
-) {
-    // Sync files to disk
-    stream::iter(written_files.into_iter().map(|path| async move {
-        if let Ok(file) = compio::fs::OpenOptions::new().write(true).open(&path).await {
-            let _ = file.sync_all().await;
+/// Sync file descriptor wrappers to disk.
+pub async fn sync_to_disk(fds: Vec<(compio::fs::File, PathBuf)>) -> Result<(), SyncError> {
+    // Sync files and dirs to disk.
+    // Each future is attempted to be driven to conclusion which is why the results are collected
+    // rather than using try_collect(). try_collect() short circuits.
+    let errors: Vec<_> = stream::iter(fds.into_iter().map(|(fd, path)| async move {
+        // See write(2) which recommends fsync before closing to ensure write errors propagate.
+        if let Err(e) = fd.sync_all().await {
+            // Slightly ugly because borrowck wants path to be cloned.
+            return Some((e, path));
         }
+        // close(2) is unlikely to fail after fsync.
+        fd.close().await.err().map(|e| (e, path))
     }))
     .buffer_unordered(32)
-    .collect::<()>()
+    .filter_map(futures::future::ready)
+    .collect()
     .await;
 
-    // Sync directories to disk
-    stream::iter(target_dirs.into_iter().map(|path| async move {
-        if let Ok(dir) = compio::fs::OpenOptions::new().read(true).open(&path).await {
-            let _ = dir.sync_all().await;
-        }
-    }))
-    .buffer_unordered(16)
-    .collect::<()>()
-    .await;
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(SyncError(errors.into_boxed_slice()))
+    }
 }
+
+#[derive(Debug)]
+pub struct SyncError(pub Box<[(io::Error, PathBuf)]>);
+
+impl Display for SyncError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        writeln!(f, "failed to sync files to disk\n")?;
+        for (e, path) in &self.0 {
+            writeln!(f, "{e}: {path:?}")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl std::error::Error for SyncError {}
 
 pub fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
     // List of compound extensions to check
@@ -968,12 +985,11 @@ impl Operation {
             } => {
                 let controller_clone = controller.clone();
                 compio::runtime::spawn(async move {
-                    let extracted = compio::runtime::spawn_blocking(move || {
+                    let op_sel = compio::runtime::spawn_blocking(move || {
                         let controller = controller_clone;
                         let total_paths = paths.len();
                         let mut op_sel = OperationSelection::default();
-                        let mut written_files = Vec::new();
-                        let mut target_dirs = std::collections::HashSet::new();
+                        let mut dirty_fds = Vec::new();
                         for (i, path) in paths.iter().enumerate() {
                             futures::executor::block_on(async {
                                 controller
@@ -997,26 +1013,28 @@ impl Operation {
                                 op_sel.ignored.push(path.clone());
                                 op_sel.selected.push(new_dir.clone());
 
-                                let (files, dirs) = crate::archive::extract(
+                                let fds = crate::archive::extract(
                                     path,
                                     &new_dir,
                                     &password,
                                     &controller,
                                 )?;
-                                written_files.extend(files);
-                                target_dirs.extend(dirs);
+                                dirty_fds.extend(fds);
                             }
                         }
 
-                        Ok::<_, OperationError>((op_sel, written_files, target_dirs))
+                        // Batch sync file descriptors
+                        for fd in dirty_fds {
+                            // Drop would close the File and likely won't fail due to fsyncing here.
+                            // TIL there's no File::close; should be okay though.
+                            fd.sync_all()
+                                .map_err(|e| OperationError::from_err(e, &controller))?;
+                        }
+
+                        Ok::<_, OperationError>(op_sel)
                     })
                     .await
                     .map_err(wrap_compio_spawn_error)??;
-
-                    let (op_sel, written_files, target_dirs) = extracted;
-                    if !written_files.is_empty() || !target_dirs.is_empty() {
-                        sync_to_disk(written_files, target_dirs).await;
-                    }
 
                     Ok::<_, OperationError>(op_sel)
                 })
@@ -1273,12 +1291,13 @@ fn wrap_compio_spawn_error(err: Box<dyn std::any::Any + Send>) -> OperationError
 #[cfg(test)]
 mod tests {
     use std::fs::{self, File};
-    use std::io;
-    use std::path::PathBuf;
+    use std::io::{self, Write};
+    use std::path::{Path, PathBuf};
 
     use cosmic::iced::futures::channel::mpsc;
     use cosmic::iced::futures::{StreamExt, future};
     use log::debug;
+    use tempfile::tempdir;
     use test_log::test;
     use tokio::sync;
 
@@ -1497,6 +1516,47 @@ mod tests {
 
         assert!(file_path.exists(), "Original file should still exist");
         assert!(expected.exists(), "File should have been copied");
+
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test(compio::test)]
+    async fn extract_zip_with_files_and_symlink() -> Result<(), Box<dyn std::error::Error>> {
+        let fs = tempdir()?;
+        let archive_path = fs.path().join("archive.zip");
+        let extract_dir = fs.path().join("archive");
+
+        {
+            let file = File::create(&archive_path)?;
+            let mut archive = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default();
+
+            archive.add_directory("a/", options)?;
+            archive.start_file("a/FileA", options)?;
+            archive.write_all(b"a")?;
+            archive.start_file("FileB", options)?;
+            archive.write_all(b"b")?;
+            archive.add_symlink("FileC", "a/FileA", options)?;
+            archive.finish()?;
+        }
+
+        let (tx, _rx) = mpsc::channel(1);
+        Operation::Extract {
+            paths: Box::new([archive_path]),
+            to: fs.path().to_path_buf(),
+            password: None,
+        }
+        .perform(&sync::Mutex::new(tx).into(), Controller::default())
+        .await?;
+
+        assert_eq!(fs::read_to_string(extract_dir.join("a/FileA"))?, "a");
+        assert_eq!(fs::read_to_string(extract_dir.join("FileB"))?, "b");
+
+        let link = extract_dir.join("FileC");
+        assert!(fs::symlink_metadata(&link)?.file_type().is_symlink());
+        assert_eq!(fs::read_link(&link)?, Path::new("a/FileA"));
+        assert_eq!(fs::read_to_string(&link)?, "a");
 
         Ok(())
     }
