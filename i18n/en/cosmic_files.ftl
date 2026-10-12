@@ -352,6 +352,9 @@ sort-by-trashed = Sort by delete time
 remove-from-recents = Remove from recents
 
 ## Desktop
+arrange-by-name = Arrange by name
+arrange-by-modified = Arrange by modified
+arrange-by-size = Arrange by size
 change-wallpaper = Change wallpaper...
 desktop-appearance = Desktop appearance...
 display-settings = Display settings...

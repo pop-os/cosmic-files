@@ -240,6 +240,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             button_id: widget::Id::unique(),
             pos_opt: Cell::new(None),
             rect_opt: Cell::new(None),
+            grid_bounds: None,
             selected: false,
             highlighted: false,
             overlaps_drag_rect: false,
