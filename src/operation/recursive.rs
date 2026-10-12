@@ -34,6 +34,11 @@ pub enum GioCopyError {
     GLib(#[from] glib::Error),
 }
 
+#[cfg(feature = "gvfs")]
+fn is_gvfs_fuse_path(path: &std::path::Path) -> bool {
+    dirs::runtime_dir().is_some_and(|dir| path.starts_with(dir.join("gvfs")))
+}
+
 pub enum Method {
     Copy,
     Move { cross_device_copy: bool },
@@ -523,8 +528,23 @@ impl Op {
                 Ok(count) => count,
                 Err(why) => {
                     ctx.buf = buf_out;
-                    tracing::error!("failed to read: {:?}", why);
                     _ = futures::future::join(from_file.close(), to_file.close()).await;
+
+                    #[cfg(feature = "gvfs")]
+                    if is_gvfs_fuse_path(&self.from) {
+                        tracing::warn!(
+                            ?why,
+                            "read failed on gvfs FUSE path {}, falling back to gio copy",
+                            self.from.display()
+                        );
+                        return self
+                            .gio_file_copy(ctx, progress)
+                            .await
+                            .map(|()| true)
+                            .map_err(Into::into);
+                    }
+
+                    tracing::error!("failed to read: {:?}", why);
                     return Err(why).context("failed to read")?;
                 }
             };
