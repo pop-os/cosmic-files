@@ -2390,7 +2390,7 @@ impl Application for App {
             .comments(fl!("comment"))
             .license("GPL-3.0-only")
             .license_url("https://spdx.org/licenses/GPL-3.0-only")
-            .developers([("Jeremy Soller", "jeremy@system76.com")])
+            .developers([("System76", "info@system76.com")])
             .links([
                 (fl!("repository"), "https://github.com/pop-os/cosmic-files"),
                 (
@@ -5545,6 +5545,7 @@ impl Application for App {
                             widget::row::with_children([
                                 widget::text_input("", name.as_str())
                                     .id(self.dialog_text_input.clone())
+                                    .capture_escape(false)
                                     .on_input(move |name| {
                                         Message::DialogUpdate(DialogPage::Compress {
                                             paths: paths.clone(),
@@ -5586,6 +5587,7 @@ impl Application for App {
                         widget::text::body(fl!("password")).into(),
                         widget::text_input("", password_unwrapped)
                             .password()
+                            .capture_escape(false)
                             .on_input(move |password_unwrapped| {
                                 Message::DialogUpdate(DialogPage::Compress {
                                     paths: paths.clone(),
@@ -5652,6 +5654,7 @@ impl Application for App {
                 .control(
                     widget::text_input("", password)
                         .password()
+                        .capture_escape(false)
                         .on_input(move |password| {
                             Message::DialogUpdate(DialogPage::ExtractPassword { id: *id, password })
                         })
@@ -5879,6 +5882,7 @@ impl Application for App {
                             .into(),
                             widget::text_input("", name.as_str())
                                 .id(self.dialog_text_input.clone())
+                                .capture_escape(false)
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::NewItem {
                                         parent: parent.clone(),
@@ -6002,6 +6006,7 @@ impl Application for App {
                             search_app_name,
                         )
                         .id(self.dialog_text_input.clone())
+                        .capture_escape(false)
                         .on_clear(Message::OpenWithSearchClear)
                         .on_input(move |search_app_name| {
                             Message::DialogUpdate(DialogPage::OpenWith {
@@ -6110,6 +6115,7 @@ impl Application for App {
                             widget::text::body(fl!("sidebar-label")).into(),
                             widget::text_input("", label.as_str())
                                 .id(self.dialog_text_input.clone())
+                                .capture_escape(false)
                                 .on_input(move |label| {
                                     Message::DialogUpdate(DialogPage::ChangeSidebarLabel {
                                         entity,
@@ -6183,6 +6189,7 @@ impl Application for App {
                             .into(),
                             widget::text_input("", name.as_str())
                                 .id(self.dialog_text_input.clone())
+                                .capture_escape(false)
                                 .double_click_select_delimiter('.')
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::RenameItem {
@@ -6447,6 +6454,7 @@ impl Application for App {
                     widget::text_input::search_input("", term)
                         .width(Length::Fixed(240.0))
                         .id(self.search_id.clone())
+                        .capture_escape(false)
                         .on_clear(Message::SearchClear)
                         .on_input(Message::SearchInput)
                         .into(),
@@ -6480,6 +6488,7 @@ impl Application for App {
                     widget::text_input::search_input("", term)
                         .width(Length::Fill)
                         .id(self.search_id.clone())
+                        .capture_escape(false)
                         .on_clear(Message::SearchClear)
                         .on_input(Message::SearchInput),
                 )
@@ -7061,6 +7070,10 @@ impl Application for App {
                 .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),
             )
         }));
+
+        if let Some(dialog) = &self.file_dialog_opt {
+            subscriptions.push(dialog.subscription());
+        };
 
         Subscription::batch(subscriptions)
     }

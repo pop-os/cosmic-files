@@ -446,3 +446,6 @@ rename-confirm = Athainmnigh
 checksum = { $kind } suim sheiceála
 calculate = Ríomh
 error = Earráid
+sidebar-label = Lipéad an bharra taoibh
+search-application = Cuardaigh de réir ainm an fheidhmchláir
+change-sidebar-label = Athraigh lipéad an bharra taoibh
