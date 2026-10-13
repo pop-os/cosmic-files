@@ -336,7 +336,7 @@ impl MimeAppCache {
         list.load_from_paths(&paths);
         let locales = fde::get_languages_from_env();
         let desktop_entries = fde::Iter::new(fde::default_paths()).entries(Some(&locales));
-        let mime_icon_cache = mime_icon::MIME_ICON_CACHE.lock().unwrap();
+        let mime_icon_cache = &mime_icon::MIME_ICON_CACHE;
         let shared_mime_info = &mime_icon_cache.shared_mime_info;
         let mut aliased_mimes = FxHashMap::default();
 
