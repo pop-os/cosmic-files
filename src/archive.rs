@@ -150,12 +150,8 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     let mut files_by_last_modified = Vec::with_capacity(total_files);
 
     for i in 0..total_files {
-        futures::executor::block_on(async {
-            controller
-                .check()
-                .await
-                .map_err(|s| io::Error::other(OperationError::from_state(s, &controller)))
-        })?;
+        futures::executor::block_on(controller.check())
+            .map_err(|s| io::Error::other(OperationError::from_state(s, &controller)))?;
 
         controller.set_progress(i as f32 / total_files as f32);
 
@@ -235,12 +231,8 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         let mut outfile = fs::File::create(&outpath)?;
         let mut current = 0;
         loop {
-            futures::executor::block_on(async {
-                controller
-                    .check()
-                    .await
-                    .map_err(|s| io::Error::other(OperationError::from_state(s, &controller)))
-            })?;
+            futures::executor::block_on(controller.check())
+                .map_err(|s| io::Error::other(OperationError::from_state(s, &controller)))?;
 
             let count = file.read(&mut buffer)?;
             if count == 0 {
