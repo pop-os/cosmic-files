@@ -1783,6 +1783,7 @@ pub enum Message {
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
     DragEnd,
+    DragCursorMoved(f32, f32),
     EditLocation(Option<EditLocation>),
     EditLocationComplete(usize),
     EditLocationEnable,
@@ -3584,6 +3585,34 @@ impl Tab {
             }
             Message::DragEnd => {
                 self.clicked = None;
+                commands.push(Command::AutoScroll(None));
+            }
+            Message::DragCursorMoved(_cursor_x, cursor_y) => {
+                let max_scroll_speed = 15.0;
+                let edge_threshold = 30.0;
+                let scroll_offset_y = self.scroll_opt.map_or(0.0, |offset| offset.y);
+                let tab_ui_offset = self.viewport_opt.map_or(0.0, |v| v.y - scroll_offset_y);
+                let viewport_height = self.viewport_opt.map_or(0.0, |v| v.height);
+
+                // Fancy math to make scroll happen faster as cursor gets closer to the top or bottom.
+                let mut scroll_speed = None;
+                if cursor_y < edge_threshold + tab_ui_offset {
+                    scroll_speed = if cursor_y < tab_ui_offset {
+                        None
+                    } else {
+                        let auto_scroll_coefficient =
+                            (edge_threshold + tab_ui_offset - cursor_y) / edge_threshold;
+                        Some(-auto_scroll_coefficient * max_scroll_speed)
+                    }
+                } else if cursor_y > viewport_height + tab_ui_offset - edge_threshold {
+                    let auto_scroll_coefficient = (cursor_y - viewport_height - tab_ui_offset
+                        + edge_threshold)
+                        .clamp(0.0, edge_threshold)
+                        / edge_threshold;
+                    scroll_speed = Some(auto_scroll_coefficient * max_scroll_speed);
+                }
+
+                commands.push(Command::AutoScroll(scroll_speed));
             }
             Message::DoubleClick(click_i_opt) => {
                 if let Some(clicked_item) = self
