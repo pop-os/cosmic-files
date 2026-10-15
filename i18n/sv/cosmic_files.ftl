@@ -79,7 +79,7 @@ rename-folder = Byt namn på mapp
 
 ## Ersätt dialogruta
 
-replace = Byt ut
+replace = Ersätt
 replace-title = "{ $filename }" finns redan på den här platsen
 replace-warning = Vill du ersätta filen med den du sparar? Om du ersätter den kommer dess innehåll att skrivas över.
 replace-warning-operation = Vill du ersätta den? Om du ersätter den kommer dess innehåll att skrivas över.
@@ -119,7 +119,7 @@ operations-running-finished =
     { $running } { $running ->
         [one] åtgärd
        *[other] åtgärder
-    } kör ({ $percent }%), { $finished } slutförda...
+    } pågår ({ $percent }%), { $finished } slutförda...
 pause = Pausa
 resume = Återuppta
 
@@ -131,7 +131,7 @@ resume = Återuppta
 
 ## Lägg till en Nätverksenhet
 
-add-network-drive = Lägg till en Nätverksenhet
+add-network-drive = Lägg till en nätverksenhet
 connect = Anslut
 connect-anonymously = Anslut anonymt
 connecting = Ansluter...
@@ -179,54 +179,54 @@ compressed =
         [one] objekt
        *[other] objekt
     } från "{ $from }" till "{ $to }"
-copy_noun = Kopiera
+copy_noun = Kopia
 creating = Skapar "{ $name }" i "{ $parent }"
 created = Skapade "{ $name }" i "{ $parent }"
 copying =
     Kopierar { $items } { $items ->
         [one] objekt
-       *[other] flera objekt
+       *[other] objekt
     } från "{ $from }" till "{ $to }" ({ $progress })...
 copied =
     Kopierade { $items } { $items ->
         [one] objekt
-       *[other] flera objekt
+       *[other] objekt
     } från "{ $from }" till "{ $to }"
 emptying-trash = Tömmer { trash } ({ $progress })...
 emptied-trash = Tömde { trash }
 extracting =
     Packar upp { $items } { $items ->
         [one] objekt
-       *[other] flera objekt
+       *[other] objekt
     } från "{ $from }" till "{ $to }" ({ $progress })...
 extracted =
     Packade upp { $items } { $items ->
         [one] objekt
-       *[other] flera objekt
+       *[other] objekt
     } från "{ $from }" till "{ $to }"
 setting-executable-and-launching = Gör "{ $name }" körbar och startar
 set-executable-and-launched = Gjorde "{ $name }" körbar och startade
 moving =
     Flyttar { $items } { $items ->
         [one] objekt
-       *[other] flera objekt
+       *[other] objekt
     } från "{ $from }" till "{ $to }" ({ $progress })...
 moved =
     Flyttade { $items } { $items ->
         [one] objekt
-       *[other] flera objekt
+       *[other] objekt
     } från "{ $from }" till "{ $to }"
 renaming = Byter namn på "{ $from }" till "{ $to }"
-renamed = Bytt namn på "{ $from }" till "{ $to }"
+renamed = Bytte namn på "{ $from }" till "{ $to }"
 restoring =
     Återställer { $items } { $items ->
         [one] objekt
-       *[other] flera objekt
+       *[other] objekt
     } från { trash } ({ $progress })...
 restored =
-    Återställt { $items } { $items ->
+    Återställde { $items } { $items ->
         [one] objekt
-       *[other] flera objekt
+       *[other] objekt
     } från { trash }
 unknown-folder = okänd mapp
 
@@ -252,7 +252,7 @@ calculating = Beräknar...
 ## Inställningar
 
 settings = Inställningar
-single-click = Ett enkelklick för att öppna
+single-click = Enkelklicka för att öppna
 
 ### Utseende
 
@@ -306,7 +306,7 @@ edit = Redigera
 cut = Klipp ut
 copy = Kopiera
 paste = Klistra in
-select-all = Välj alla
+select-all = Markera allt
 
 ## Visa
 
@@ -318,7 +318,7 @@ grid-view = Rutnätsvy
 list-view = Listvy
 show-hidden-files = Visa dolda filer
 list-directories-first = Lista mappar först
-gallery-preview = Galleri förhandsvisning
+gallery-preview = Galleriförhandsvisning
 menu-settings = Inställningar...
 menu-about = Om COSMIC Filer...
 
@@ -356,7 +356,7 @@ favorite-path-error-description =
     Kunde inte öppna "{ $path }"
     "{ $path }" finns kanske inte eller så har du inte behörighet att öppna den
 
-    Vill du ta bort den från sidolisten?
+    Vill du ta bort den från sidofältet?
 keep = Behåll
 progress-failed = { $percent }%, misslyckades
 deleting =
@@ -365,22 +365,22 @@ deleting =
        *[other] objekt
     } från { trash } ({ $progress })...
 deleted =
-    Borttagna { $items } { $items ->
+    Tog bort { $items } { $items ->
         [one] objekt
        *[other] objekt
     } från { trash }
 setting-permissions = Sätter behörigheter för "{ $name }" till { $mode }
-set-permissions = Satte behörigheter för "{ $name }" to { $mode }
+set-permissions = Satte behörigheter för "{ $name }" till { $mode }
 permanently-deleting =
     Raderar { $items } { $items ->
         [one] objekt
        *[other] objekt
     } permanent
 permanently-deleted =
-    Permanent borttagna { $items } { $items ->
+    Tog bort { $items } { $items ->
         [one] objekt
        *[other] objekt
-    }
+    } permanent
 removing-from-recents =
     Tar bort { $items } { $items ->
         [one] objekt
