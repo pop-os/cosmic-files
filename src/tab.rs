@@ -5651,6 +5651,8 @@ impl Tab {
                         fl!("empty-folder-hidden")
                     } else if matches!(self.location, Location::Search(..)) {
                         fl!("no-results")
+                    } else if matches!(self.location, Location::Trash) && !Trash::is_empty() {
+                        fl!("missing-trash-metadata")
                     } else {
                         fl!("empty-folder")
                     })
