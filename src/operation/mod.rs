@@ -860,7 +860,8 @@ impl Operation {
 
                     let _items_opt = compio::runtime::spawn_blocking(|| trash::delete(path))
                         .await
-                        .map_err(wrap_compio_spawn_error)?;
+                        .map_err(wrap_compio_spawn_error)?
+                        .map_err(|e| OperationError::from_err(e, &controller))?;
                     //TODO: items_opt allows for easy restore
                 }
                 Ok(OperationSelection::default())
