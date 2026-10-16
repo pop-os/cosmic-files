@@ -71,8 +71,12 @@ async fn handle_replace(
 fn get_directory_name(file_name: &str) -> &str {
     // TODO: Chain with COMPOUND_EXTENSIONS once more formats are supported
     for ext in crate::archive::SUPPORTED_EXTENSIONS {
-        if let Some(stripped) = file_name.strip_suffix(ext) {
-            return stripped;
+        if let Some(at) = file_name.len().checked_sub(ext.len())
+            && let Some((stem, suffix)) = file_name.split_at_checked(at)
+            && !stem.is_empty()
+            && suffix.eq_ignore_ascii_case(ext)
+        {
+            return stem;
         }
     }
     file_name
@@ -1503,7 +1507,10 @@ mod tests {
 
         let cases = [
             ("archive.zip", "archive"),
+            ("ARCHIVE.ZIP", "ARCHIVE"),
+            ("Photos.Zip", "Photos"),
             ("site.tar.gz", "site"),
+            ("SITE.TAR.GZ", "SITE"),
             ("release.tbz2", "release"),
             ("release.tb2", "release"),
             ("dump.tar.bz2", "dump"),
@@ -1512,11 +1519,19 @@ mod tests {
             ("source.tgz", "source"),
             ("source.tar", "source"),
             ("logs.txz", "logs"),
+            ("logs.TXZ", "logs"),
             ("my.photos.zip", "my.photos"),
             ("テスト.zip", "テスト"),
+            // "İ" changes byte length when lowercased (2 to 3). Must find the split on the original name
+            ("İSTANBUL.ZIP", "İSTANBUL"),
             // These names have no supported archive extension. Left unchanged
             ("notes.txt", "notes.txt"),
             ("zip", "zip"),
+            // Extension-only names would strip to an empty dir name; keep them as-is
+            (".zip", ".zip"),
+            (".tar.gz", ".tar.gz"),
+            // The ".zip" split point falls inside "é" (mid-char). Must not panic
+            ("é.zi", "é.zi"),
         ];
         for (file_name, expected) in cases {
             assert_eq!(get_directory_name(file_name), expected, "for {file_name:?}");
