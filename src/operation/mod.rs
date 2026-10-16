@@ -1496,4 +1496,30 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn get_directory_name_strips_supported_archive_extensions() {
+        use super::get_directory_name;
+
+        let cases = [
+            ("archive.zip", "archive"),
+            ("site.tar.gz", "site"),
+            ("release.tbz2", "release"),
+            ("release.tb2", "release"),
+            ("dump.tar.bz2", "dump"),
+            ("old.tar.lzma", "old"),
+            ("release.tar.xz", "release"),
+            ("source.tgz", "source"),
+            ("source.tar", "source"),
+            ("logs.txz", "logs"),
+            ("my.photos.zip", "my.photos"),
+            ("テスト.zip", "テスト"),
+            // These names have no supported archive extension. Left unchanged
+            ("notes.txt", "notes.txt"),
+            ("zip", "zip"),
+        ];
+        for (file_name, expected) in cases {
+            assert_eq!(get_directory_name(file_name), expected, "for {file_name:?}");
+        }
+    }
 }
