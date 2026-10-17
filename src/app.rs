@@ -145,6 +145,7 @@ pub enum Action {
     EditLocation,
     Eject,
     EmptyTrash,
+    DeleteOrphanedFiles,
     #[cfg(feature = "desktop")]
     ExecEntryAction(usize),
     ExtractHere,
@@ -218,6 +219,7 @@ impl Action {
             Self::EditLocation => Message::TabMessage(entity_opt, tab::Message::EditLocationEnable),
             Self::Eject => Message::Eject,
             Self::EmptyTrash => Message::TabMessage(None, tab::Message::EmptyTrash),
+            Self::DeleteOrphanedFiles => Message::DeleteOrphanedFiles,
             Self::ExtractHere => Message::ExtractHere(entity_opt),
             Self::ExtractTo => Message::ExtractTo(entity_opt),
             #[cfg(feature = "desktop")]
@@ -345,6 +347,7 @@ pub enum Message {
     CosmicSettings(&'static str),
     Cut(Option<Entity>),
     Delete(Option<Entity>),
+    DeleteOrphanedFiles,
     DesktopConfig(DesktopConfig),
     DesktopViewOptions,
     DesktopDialogs(bool),
@@ -3039,6 +3042,9 @@ impl Application for App {
                         }
                     }
                 }
+            }
+            Message::DeleteOrphanedFiles => {
+                return self.operation(Operation::DeleteOrphanedFiles);
             }
             Message::DesktopConfig(config) => {
                 if config != self.config.desktop {
