@@ -1791,6 +1791,7 @@ pub enum Message {
     OpenInNewTab(PathBuf),
     ClearRecents,
     EmptyTrash,
+    DeleteOrphanedFiles,
     #[cfg(feature = "desktop")]
     ExecEntryAction(Option<PathBuf>, usize),
     Gallery(bool),
@@ -3915,6 +3916,9 @@ impl Tab {
             Message::EmptyTrash => {
                 commands.push(Command::EmptyTrash);
             }
+            Message::DeleteOrphanedFiles => {
+                commands.push(Command::Action(Action::DeleteOrphanedFiles));
+            }
             #[cfg(feature = "desktop")]
             Message::ExecEntryAction(path, action) => {
                 let lang_id = crate::localize::LANGUAGE_LOADER.current_language();
@@ -5642,22 +5646,34 @@ impl Tab {
 
         mouse_area::MouseArea::new(widget::column::with_children([widget::container(
             match self.mode {
-                Mode::App | Mode::Dialog(_) => widget::column::with_children([
-                    widget::icon::from_name("folder-symbolic")
-                        .size(64)
-                        .icon()
+                Mode::App | Mode::Dialog(_) => {
+                    let mut ui_elements = vec![
+                        widget::icon::from_name("folder-symbolic")
+                            .size(64)
+                            .icon()
+                            .into(),
+                        widget::text::body(if has_hidden {
+                            fl!("empty-folder-hidden")
+                        } else if matches!(self.location, Location::Search(..)) {
+                            fl!("no-results")
+                        } else if matches!(self.location, Location::Trash) && !Trash::is_empty() {
+                            fl!("missing-trash-metadata")
+                        } else {
+                            fl!("empty-folder")
+                        })
                         .into(),
-                    widget::text::body(if has_hidden {
-                        fl!("empty-folder-hidden")
-                    } else if matches!(self.location, Location::Search(..)) {
-                        fl!("no-results")
-                    } else if matches!(self.location, Location::Trash) && !Trash::is_empty() {
-                        fl!("missing-trash-metadata")
-                    } else {
-                        fl!("empty-folder")
-                    })
-                    .into(),
-                ]),
+                    ];
+
+                    if matches!(self.location, Location::Trash) && !Trash::is_empty() {
+                        ui_elements.push(
+                            widget::button::text(fl!("delete-orphans"))
+                                .on_press(Message::DeleteOrphanedFiles)
+                                .into(),
+                        );
+                    }
+
+                    widget::column::with_children(ui_elements).into()
+                }
                 Mode::Desktop => widget::column::with_capacity(0),
             }
             .align_x(Alignment::Center)
