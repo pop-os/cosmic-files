@@ -269,7 +269,11 @@ impl Context {
                 Ok(ControlFlow::Continue(op.to.clone()))
             }
             ReplaceResult::KeepBoth => match op.to.parent() {
-                Some(to_parent) => Ok(ControlFlow::Continue(copy_unique_path(&op.from, to_parent))),
+                Some(to_parent) => Ok(ControlFlow::Continue(copy_unique_path(
+                    &op.from,
+                    to_parent,
+                    op.from.is_dir(),
+                ))),
                 None => Err(format!("failed to get parent of {}", op.to.display()).into()),
             },
             ReplaceResult::Skip(apply_to_all) => {

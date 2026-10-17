@@ -122,7 +122,7 @@ async fn copy_or_move(
                 {
                     // `from`'s parent is equal to `to` which means we're copying to the same
                     // directory (duplicating files)
-                    let to = copy_unique_path(&from, to);
+                    let to = copy_unique_path(&from, to, from.is_dir());
                     Some((from, to))
                 } else if let Some(name) = from.file_name() {
                     let to = to.join(name);
@@ -242,7 +242,7 @@ pub async fn sync_to_disk(
     .await;
 }
 
-pub fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
+pub fn copy_unique_path(from: &Path, to: &Path, is_dir: bool) -> PathBuf {
     // List of compound extensions to check
     const COMPOUND_EXTENSIONS: &[&str] = &[
         ".tar.gz",
@@ -260,7 +260,7 @@ pub fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
 
     let mut to = to.to_owned();
     if let Some(file_name) = from.file_name().and_then(|name| name.to_str()) {
-        let (stem, ext) = if from.is_dir() {
+        let (stem, ext) = if is_dir {
             (file_name.to_string(), None)
         } else {
             let file_name = file_name.to_string();
@@ -995,7 +995,7 @@ impl Operation {
                                 if new_dir.exists()
                                     && let Some(new_dir_parent) = new_dir.parent()
                                 {
-                                    new_dir = copy_unique_path(&new_dir, new_dir_parent);
+                                    new_dir = copy_unique_path(&new_dir, new_dir_parent, true);
                                 }
 
                                 op_sel.ignored.push(path.clone());
