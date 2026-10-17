@@ -368,6 +368,8 @@ pub enum Operation {
     DeleteTrash {
         items: Vec<trash::TrashItem>,
     },
+    /// Deletes only items in the trash without associated .trashinfo files
+    DeleteOrphanedFiles,
     /// Empty the trash
     EmptyTrash,
     /// Uncompress files
@@ -504,6 +506,7 @@ impl Operation {
             Self::DeleteTrash { items } => {
                 fl!("deleting", items = items.len(), progress = progress())
             }
+            Self::DeleteOrphanedFiles => fl!("emptying-trash", progress = progress()),
             Self::EmptyTrash => fl!("emptying-trash", progress = progress()),
             Self::Extract {
                 paths,
@@ -573,6 +576,7 @@ impl Operation {
                 to = fl!("trash")
             ),
             Self::DeleteTrash { items } => fl!("deleted", items = items.len()),
+            Self::DeleteOrphanedFiles => fl!("emptied-trash"),
             Self::EmptyTrash => fl!("emptied-trash"),
             Self::Extract {
                 paths,
@@ -628,6 +632,7 @@ impl Operation {
             | Self::Extract { .. }
             | Self::Move { .. }
             | Self::PermanentlyDelete { .. }
+            | Self::DeleteOrphanedFiles { .. }
             | Self::Restore { .. } => true,
             Self::NewFile { .. }
             | Self::NewFolder { .. }
@@ -960,6 +965,44 @@ impl Operation {
                     .map_err(wrap_compio_spawn_error)?
                     .map_err(|e| OperationError::from_err(e, &controller))?;
                 }
+                Ok(OperationSelection::default())
+            }
+            Self::DeleteOrphanedFiles => {
+                for trash_dir in trash::os_limited::trash_folders()
+                    .map_err(|e| OperationError::from_err(e, &controller))?
+                {
+                    let current_files_dir = trash_dir.join("files");
+                    let current_info_dir = trash_dir.join("info");
+                    if !current_files_dir.is_dir() {
+                        continue;
+                    }
+
+                    let files = fs::read_dir(&current_files_dir)
+                        .map_err(|e| OperationError::from_err(e, &controller))?;
+                    let mut orphaned_files = Vec::new();
+                    for entry in files {
+                        let entry = entry.map_err(|e| OperationError::from_err(e, &controller))?;
+                        let mut trashed_file_name = entry.file_name();
+                        trashed_file_name.push(".trashinfo");
+                        let trashinfo_path = current_info_dir.join(trashed_file_name);
+                        if !trashinfo_path.exists() {
+                            orphaned_files.push(entry.path());
+                        }
+                    }
+
+                    let num_paths_to_delete = orphaned_files.len() as f32;
+                    for (i, path_to_delete) in orphaned_files.into_iter().enumerate() {
+                        if path_to_delete.is_dir() {
+                            fs::remove_dir_all(&path_to_delete)
+                                .map_err(|e| OperationError::from_err(e, &controller))?;
+                        } else {
+                            fs::remove_file(&path_to_delete)
+                                .map_err(|e| OperationError::from_err(e, &controller))?;
+                        }
+                        controller.set_progress(i as f32 / num_paths_to_delete);
+                    }
+                }
+
                 Ok(OperationSelection::default())
             }
             Self::Extract {

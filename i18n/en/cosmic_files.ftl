@@ -62,6 +62,7 @@ extract-to-title = Extract to folder
 empty-trash = Empty trash
 empty-trash-title = Empty trash?
 empty-trash-warning = Items in the Trash folder will be permanently deleted
+delete-orphans = Delete orphaned files
 
 ## Mount Error Dialog
 mount-error = Unable to access drive
