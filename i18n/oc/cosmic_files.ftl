@@ -31,3 +31,7 @@ remove = Suprimir
 connecting = Connexion...
 domain = Domeni
 password = Senhal
+open-file = Dobrir lo fichièr
+open-folder = Dobrir lo dossièr
+edit = Edicion
+select-all = O seleccionar tot
