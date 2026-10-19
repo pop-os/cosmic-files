@@ -588,7 +588,6 @@ impl App {
             col = col.push(
                 widget::text_input("", filename)
                     .id(self.filename_id.clone())
-                    .capture_escape(false)
                     .double_click_select_delimiter('.')
                     .on_input(Message::Filename)
                     .on_submit(|_| Message::Save(false)),
@@ -1172,7 +1171,6 @@ impl Application for App {
                             widget::text::body(fl!("folder-name")).into(),
                             widget::text_input("", name.as_str())
                                 .id(self.dialog_text_input.clone())
-                                .capture_escape(false)
                                 .on_input(move |name| {
                                     Message::DialogUpdate(DialogPage::NewFolder {
                                         parent: parent.clone(),
