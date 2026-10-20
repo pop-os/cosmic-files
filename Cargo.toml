@@ -43,7 +43,7 @@ xdg-mime = { git = "https://github.com/ebassi/xdg-mime-rs" }
 bzip2 = { version = "0.6", optional = true }           #TODO: replace with pure Rust crate
 flate2 = "1.1"
 tar = "0.4.45"
-lzma-rust2 = { version = "0.16", optional = true }
+lzma-rust2 = { version = "0.22", optional = true }
 ordermap = { version = "1.2.0", features = ["serde"] }
 # Internationalization
 i18n-embed = { version = "0.16", features = [
@@ -54,7 +54,7 @@ i18n-embed-fl = "0.10"
 rust-embed = "8"
 slotmap = "1.1.1"
 recently-used-xbel = "1.2.0"
-zip = "8"
+zip = "9"
 md-5 = "0.10.6"
 sha2 = "0.10"
 png = "0.18"
