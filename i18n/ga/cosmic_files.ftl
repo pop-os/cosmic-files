@@ -205,7 +205,7 @@ username = Ainm úsáideora
 
 cancelled = Cealaithe
 edit-history = Cuir stair in eagar
-history = Stair
+history = Stair...
 no-history = Gan aon mhíreanna sa stair.
 pending = Ar feitheamh
 progress = { $percent }%
@@ -291,7 +291,7 @@ default-app = { $name } (réamhshocraithe)
 
 ## Show details
 
-show-details = Taispeáin sonraí
+show-details = Taispeáin sonraí...
 type = Cineál: { $mime }
 items = Míreanna: { $items }
 item-size = Méid: { $size }
@@ -307,9 +307,9 @@ single-click = Cliceáil amháin le hoscailt
 
 ### Appearance
 
-appearance = Dealramh
+appearance = Cuma
 theme = Téama
-match-desktop = Meaitseáil deasc
+match-desktop = Meaitseáil leis an deasc
 dark = Dorcha
 light = Solas
 

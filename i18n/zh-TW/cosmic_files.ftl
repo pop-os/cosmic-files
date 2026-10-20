@@ -281,7 +281,7 @@ removed-from-recents =
         [one] 項目
        *[other] 項目
     }
-repository = 軟體庫
+repository = 原始碼儲存庫
 desktop-view-options = 桌面檢視選項...
 show-on-desktop = 顯示在桌面
 desktop-folder-content = 桌面資料夾內容
