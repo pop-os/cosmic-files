@@ -1578,6 +1578,13 @@ impl Location {
         })
     }
 
+    pub fn uri_opt(&self) -> Option<&str> {
+        match self {
+            Self::Network(uri, ..) => Some(uri),
+            _ => None,
+        }
+    }
+
     pub const fn path_opt(&self) -> Option<&PathBuf> {
         match self {
             Self::Desktop(path, ..) => Some(path),
@@ -1739,6 +1746,24 @@ impl fmt::Debug for TaskWrapper {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct OpenTarget {
+    pub path: PathBuf,
+    pub uri_opt: Option<String>,
+}
+
+impl AsRef<Path> for OpenTarget {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl AsRef<std::ffi::OsStr> for OpenTarget {
+    fn as_ref(&self) -> &std::ffi::OsStr {
+        self.path.as_os_str()
+    }
+}
+
 #[derive(Debug)]
 pub enum Command {
     Action(Action),
@@ -1754,8 +1779,8 @@ pub enum Command {
     #[cfg(feature = "desktop")]
     ExecEntryAction(cosmic::desktop::DesktopEntryData, usize),
     Iced(TaskWrapper),
-    OpenFile(Vec<PathBuf>),
-    OpenInNewTab(PathBuf),
+    OpenFile(Vec<OpenTarget>),
+    OpenInNewTab(Location),
     OpenInNewWindow(PathBuf),
     OpenTrash,
     Preview(PreviewKind),
@@ -1788,7 +1813,7 @@ pub enum Message {
     EditLocationEnable,
     EditLocationSubmit,
     EditLocationTab,
-    OpenInNewTab(PathBuf),
+    OpenInNewTab(Location),
     ClearRecents,
     EmptyTrash,
     #[cfg(feature = "desktop")]
@@ -3552,7 +3577,10 @@ impl Tab {
                                     if item.metadata.is_dir() {
                                         cd = Some(location.clone());
                                     } else if let Some(path) = location.path_opt() {
-                                        paths_to_open.push(path.clone());
+                                        paths_to_open.push(OpenTarget {
+                                            path: path.clone(),
+                                            uri_opt: location.uri_opt().map(String::from),
+                                        });
                                     } else {
                                         log::warn!("no path for item {item:?}");
                                     }
@@ -3595,7 +3623,10 @@ impl Tab {
                         if clicked_item.metadata.is_dir() {
                             cd = Some(location.clone());
                         } else if let Some(path) = location.path_opt() {
-                            commands.push(Command::OpenFile(vec![path.clone()]));
+                            commands.push(Command::OpenFile(vec![OpenTarget {
+                                path: path.clone(),
+                                uri_opt: location.uri_opt().map(String::from),
+                            }]));
                         } else {
                             log::warn!("no path for item {clicked_item:?}");
                         }
@@ -3780,10 +3811,23 @@ impl Tab {
                         .and_then(|path| path.ancestors().nth(ancestor_index))
                         .map(Path::to_path_buf)
                 };
+                let location_for_index = |ancestor_index| {
+                    self.location
+                        .path_opt()
+                        .and_then(|path| path.ancestors().nth(ancestor_index))
+                        .map(|path| match &self.location {
+                            Location::Network(uri, display_name, _) => Location::Network(
+                                uri.clone(),
+                                display_name.clone(),
+                                Some(path.to_path_buf()),
+                            ),
+                            _ => self.location.with_path(path.to_path_buf()),
+                        })
+                };
                 match action {
                     LocationMenuAction::OpenInNewTab(ancestor_index) => {
-                        if let Some(path) = path_for_index(ancestor_index) {
-                            commands.push(Command::OpenInNewTab(path));
+                        if let Some(location) = location_for_index(ancestor_index) {
+                            commands.push(Command::OpenInNewTab(location));
                         }
                     }
                     LocationMenuAction::OpenInNewWindow(ancestor_index) => {
@@ -4300,7 +4344,10 @@ impl Tab {
                         if path.is_dir() {
                             cd = Some(location);
                         } else {
-                            commands.push(Command::OpenFile(vec![path.clone()]));
+                            commands.push(Command::OpenFile(vec![OpenTarget {
+                                path: path.clone(),
+                                uri_opt: None,
+                            }]));
                         }
                     }
                     _ => {
@@ -4323,14 +4370,17 @@ impl Tab {
                         if path.is_dir() {
                             cd = Some(Location::Path(path));
                         } else {
-                            commands.push(Command::OpenFile(vec![path]));
+                            commands.push(Command::OpenFile(vec![OpenTarget {
+                                path,
+                                uri_opt: None,
+                            }]));
                         }
                     }
                     // Open selected items
                     None => {
                         enum ResolveResult {
-                            Open(Option<PathBuf>),
-                            OpenInTab(Option<PathBuf>),
+                            Open(Option<OpenTarget>),
+                            OpenInTab(Option<Location>),
                             OpenTrash,
                             OpenProperties,
                             Cd(Location),
@@ -4358,12 +4408,15 @@ impl Tab {
                                         if is_only_one_selected {
                                             ResolveResult::Cd(location.clone())
                                         } else {
-                                            ResolveResult::OpenInTab(path_opt.cloned())
+                                            ResolveResult::OpenInTab(Some(location.clone()))
                                         }
                                     }
                                     Mode::Desktop => match location {
                                         Location::Trash => ResolveResult::OpenTrash,
-                                        _ => ResolveResult::Open(path_opt.cloned()),
+                                        _ => ResolveResult::Open(path_opt.map(|path| OpenTarget {
+                                            path: path.clone(),
+                                            uri_opt: location.uri_opt().map(String::from),
+                                        })),
                                     },
                                     Mode::Dialog(_) => {
                                         if is_only_one_selected {
@@ -4374,7 +4427,10 @@ impl Tab {
                                     }
                                 }
                             } else {
-                                ResolveResult::Open(path_opt.cloned())
+                                ResolveResult::Open(path_opt.map(|path| OpenTarget {
+                                    path: path.clone(),
+                                    uri_opt: location.uri_opt().map(String::from),
+                                }))
                             }
                         }
                         let mut open_files = Vec::new();
@@ -4383,9 +4439,9 @@ impl Tab {
 
                             for item in items.iter() {
                                 match resolve_item(item, &self.mode, selected_count == 1) {
-                                    ResolveResult::Open(Some(p)) => open_files.push(p),
-                                    ResolveResult::OpenInTab(Some(p)) => {
-                                        commands.push(Command::OpenInNewTab(p))
+                                    ResolveResult::Open(Some(target)) => open_files.push(target),
+                                    ResolveResult::OpenInTab(Some(location)) => {
+                                        commands.push(Command::OpenInNewTab(location))
                                     }
                                     ResolveResult::Cd(loc) => cd = Some(loc),
                                     ResolveResult::OpenTrash => commands.push(Command::OpenTrash),
@@ -4446,10 +4502,18 @@ impl Tab {
                     {
                         if let Some(path) = clicked_item.path_opt() {
                             if clicked_item.metadata.is_dir() {
-                                //cd = Some(Location::Path(path.clone()));
-                                commands.push(Command::OpenInNewTab(path.clone()));
+                                if let Some(location) = clicked_item.location_opt.clone() {
+                                    commands.push(Command::OpenInNewTab(location));
+                                }
                             } else {
-                                commands.push(Command::OpenFile(vec![path.clone()]));
+                                commands.push(Command::OpenFile(vec![OpenTarget {
+                                    path: path.clone(),
+                                    uri_opt: clicked_item
+                                        .location_opt
+                                        .as_ref()
+                                        .and_then(Location::uri_opt)
+                                        .map(String::from),
+                                }]));
                             }
                         } else {
                             log::warn!("no path for item {clicked_item:?}");
@@ -4906,7 +4970,10 @@ impl Tab {
             if matches!(self.mode, Mode::Desktop) {
                 match location {
                     Location::Path(path) => {
-                        commands.push(Command::OpenFile(vec![path]));
+                        commands.push(Command::OpenFile(vec![OpenTarget {
+                            path,
+                            uri_opt: None,
+                        }]));
                     }
                     Location::Trash => {
                         commands.push(Command::OpenTrash);
@@ -5489,7 +5556,8 @@ impl Tab {
                 }
                 return column.into();
             }
-        } else if let Some(path) = self.location.path_opt() {
+        } else if self.location.path_opt().is_some() {
+            let location = self.location.clone();
             row = row.push(
                 crate::mouse_area::MouseArea::new(
                     widget::button::custom(widget::icon::from_name("edit-symbolic").size(16))
@@ -5497,7 +5565,7 @@ impl Tab {
                         .class(theme::Button::Icon)
                         .on_press(Message::EditLocation(Some(self.location.clone().into()))),
                 )
-                .on_middle_press(move |_| Message::OpenInNewTab(path.clone())),
+                .on_middle_press(move |_| Message::OpenInNewTab(location.clone())),
             );
             w += f32::from(space_xxs).mul_add(2.0, 16.0);
         }
@@ -5568,8 +5636,11 @@ impl Tab {
                     );
 
                     let mouse_area = if let Location::Path(_) = &self.location {
+                        let middle_click_location = location.clone();
                         mouse_area
-                            .on_middle_press(move |_| Message::OpenInNewTab(ancestor.to_path_buf()))
+                            .on_middle_press(move |_| {
+                                Message::OpenInNewTab(middle_click_location.clone())
+                            })
                     } else {
                         mouse_area
                     };

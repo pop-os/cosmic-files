@@ -563,6 +563,7 @@ pub enum DialogPage {
     },
     OpenWith {
         path: PathBuf,
+        uri_opt: Option<String>,
         mime: mime_guess::Mime,
         selected: usize,
         store_opt: Option<Arc<MimeApp>>,
@@ -788,34 +789,34 @@ impl App {
         }
     }
 
-    fn open_file(&mut self, paths: &[impl AsRef<Path>]) -> Task<Message> {
+    fn open_file(&mut self, targets: &[tab::OpenTarget]) -> Task<Message> {
         let mut tasks = Vec::new();
 
         // Associate all paths to its MIME type
         // This allows handling paths as groups if possible, such as launching a single video
         // player that is passed every path.
-        let mut groups: FxHashMap<Mime, Vec<PathBuf>> = FxHashMap::default();
+        let mut groups: FxHashMap<Mime, Vec<tab::OpenTarget>> = FxHashMap::default();
         let mut all_archives = true;
         let supported_archive_types = crate::archive::SUPPORTED_ARCHIVE_TYPES;
-        for (mime, path) in paths.iter().map(|path| {
-            (
-                mime_icon::mime_for_path(path, None, false),
-                path.as_ref().to_owned(),
-            )
-        }) {
+        for target in targets {
+            let mime = mime_icon::mime_for_path(&target.path, None, false);
+
             if all_archives && !supported_archive_types.iter().copied().any(|t| mime == t) {
                 all_archives = false;
             }
-            groups.entry(mime).or_default().push(path);
+            groups.entry(mime).or_default().push(target.clone());
         }
 
         if all_archives {
             // Use extract to dialog if all selected paths are supported archives
-            return self.extract_to(paths);
+            let paths: Vec<&PathBuf> = targets.iter().map(|target| &target.path).collect();
+            return self.extract_to(&paths);
         }
 
-        'outer: for (mime, paths) in groups {
-            log::debug!("Attempting to launch app\n\tfor: {mime}\n\twith: {paths:?}");
+        'outer: for (mime, targets) in groups {
+            log::debug!("Attempting to launch app\n\tfor: {mime}\n\twith: {targets:?}");
+
+            let paths: Vec<PathBuf> = targets.iter().map(|target| target.path.clone()).collect();
 
             // First launch apps that can be launched directly
             if mime == "application/x-desktop" {
@@ -849,14 +850,14 @@ impl App {
             }
 
             // Try mime apps, which should be faster than xdg-open
-            if self.launch_from_mime_cache(&mime, &paths) {
+            if self.launch_from_mime_cache(&mime, &targets) {
                 continue;
             }
 
             // loop through subclasses if available
             if let Some(mime_sub_classes) = mime_icon::parent_mime_types(&mime) {
                 for sub_class in mime_sub_classes {
-                    if self.launch_from_mime_cache(&sub_class, &paths) {
+                    if self.launch_from_mime_cache(&sub_class, &targets) {
                         continue 'outer;
                     }
                 }
@@ -899,6 +900,7 @@ impl App {
                             entry.name(&locales).as_deref().unwrap_or_default(),
                             Some(path),
                             &[] as &[&str; 0],
+                            None,
                         ) {
                             Some(commands) => {
                                 let cwd_opt = entry.desktop_entry("Path");
@@ -935,12 +937,22 @@ impl App {
         }
     }
 
-    fn launch_from_mime_cache<P>(&self, mime: &Mime, paths: &[P]) -> bool
-    where
-        P: std::fmt::Debug + AsRef<Path> + AsRef<std::ffi::OsStr>,
-    {
+    fn launch_from_mime_cache(
+        &self,
+        mime: &Mime,
+        targets: &[tab::OpenTarget],
+    ) -> bool {
+        let paths: Vec<&std::ffi::OsStr> = targets
+            .iter()
+            .map(|target| target.path.as_os_str())
+            .collect();
+        let uris: Vec<Option<&str>> = targets
+            .iter()
+            .map(|target| target.uri_opt.as_deref())
+            .collect();
+
         for app in self.mime_app_cache.get(mime) {
-            let Some(commands) = app.command(paths) else {
+            let Some(commands) = app.command(&paths, Some(&uris)) else {
                 continue;
             };
             let len = commands.len();
@@ -949,9 +961,9 @@ impl App {
                 match spawn_detached(&mut command) {
                     Ok(()) => {
                         if self.config.show_recents {
-                            for path in paths {
+                            for target in targets {
                                 let _ = recently_used_xbel::update_recently_used(
-                                    &path.into(),
+                                    &target.path,
                                     Self::APP_ID.to_string(),
                                     "cosmic-files".to_string(),
                                     None,
@@ -966,12 +978,12 @@ impl App {
                         // is associated with one instance
                         //
                         // One command: Attempted to launch one app with multiple paths
-                        let path = if len > 1 {
-                            format!("{:?}", paths.get(i))
+                        let target = if len > 1 {
+                            format!("{:?}", targets.get(i))
                         } else {
-                            format!("{paths:?}")
+                            format!("{targets:?}")
                         };
-                        log::warn!("failed to open {:?} with {:?}: {}", path, app.id, err);
+                        log::warn!("failed to open {:?} with {:?}: {}", target, app.id, err);
                     }
                 }
             }
@@ -3194,6 +3206,7 @@ impl Application for App {
                         }
                         DialogPage::OpenWith {
                             path,
+                            uri_opt,
                             mime,
                             selected,
                             search_app_name,
@@ -3209,8 +3222,10 @@ impl Application for App {
                             });
 
                             if let Some((app, _)) = available_apps.get(selected) {
-                                if let Some(mut command) =
-                                    app.command(&[&path]).and_then(|v| v.into_iter().next())
+                                let uris = [uri_opt.as_deref()];
+                                if let Some(mut command) = app
+                                    .command(&[&path], Some(&uris))
+                                    .and_then(|v| v.into_iter().next())
                                 {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
@@ -3750,7 +3765,7 @@ impl Application for App {
                     }
                     for path in paths {
                         if let Some(mut command) = terminal
-                            .command::<&str>(&[])
+                            .command::<&str>(&[], None)
                             .and_then(|v| v.into_iter().next())
                         {
                             command.current_dir(path);
@@ -3813,7 +3828,7 @@ impl Application for App {
                     let url = format!("mime:///{mime}");
                     // TODO: Support multiple URLs
                     if let Some(mut command) =
-                        app.command(&[&url]).and_then(|v| v.into_iter().next())
+                        app.command(&[&url], None).and_then(|v| v.into_iter().next())
                     {
                         if let Err(err) = spawn_detached(&mut command) {
                             log::warn!("failed to open {:?} with {:?}: {}", url, app.id, err);
@@ -3845,10 +3860,16 @@ impl Application for App {
                         let Some(path) = item.path_opt() else {
                             continue;
                         };
+                        let uri_opt = match &tab.location {
+                            tab::Location::Network(uri, _, _) => Some(uri.clone()),
+                            _ => None,
+                        };
+
                         return Task::batch([
                             self.push_dialog(
                                 DialogPage::OpenWith {
                                     path: path.clone(),
+                                    uri_opt,
                                     mime: item.mime.clone(),
                                     selected: 0,
                                     store_opt: "x-scheme-handler/mime"
@@ -4572,8 +4593,8 @@ impl Application for App {
                             }));
                         }
                         tab::Command::OpenFile(paths) => commands.push(self.open_file(&paths)),
-                        tab::Command::OpenInNewTab(path) => {
-                            commands.push(self.open_tab(Location::Path(path), false, None));
+                        tab::Command::OpenInNewTab(location) => {
+                            commands.push(self.open_tab(location, false, None));
                         }
                         tab::Command::OpenInNewWindow(path) => match env::current_exe() {
                             Ok(exe) => match process::Command::new(&exe).arg(path).spawn() {
@@ -5023,27 +5044,35 @@ impl Application for App {
                         .push_dialog(DialogPage::EmptyTrash, Some(EMPTY_TRASH_BUTTON_ID.clone()));
                 }
                 NavMenuAction::Open(entity) => {
-                    if let Some(path) = self
-                        .nav_model
-                        .data::<Location>(entity)
-                        .and_then(Location::path_opt)
-                        .cloned()
+                    if let Some(location) = self.nav_model.data::<Location>(entity)
+                        && let Some(path) = location.path_opt()
                     {
-                        return self.open_file(&[path]);
+                        return self.open_file(&[tab::OpenTarget {
+                            path: path.clone(),
+                            uri_opt: location.uri_opt().map(String::from),
+                        }]);
                     }
                 }
                 NavMenuAction::OpenWith(entity) => {
-                    if let Some(path) = self
-                        .nav_model
-                        .data::<Location>(entity)
-                        .and_then(Location::path_opt)
-                        .cloned()
-                    {
+                    if let Some(location) = self.nav_model.data::<Location>(entity) {
+                        let (path, uri_opt) = match location {
+                            Location::Network(uri, _, Some(path)) => {
+                                (path.clone(), Some(uri.clone()))
+                            }
+                            _ => {
+                                match location.path_opt().cloned() {
+                                    Some(path) => (path, None),
+                                    None => return Task::none(),
+                                }
+                            }
+                        };
+
                         match tab::item_from_path(&path, IconSizes::default()) {
                             Ok(item) => {
                                 return self.push_dialog(
                                     DialogPage::OpenWith {
                                         path,
+                                        uri_opt,
                                         mime: item.mime,
                                         selected: 0,
                                         store_opt: "x-scheme-handler/mime"
@@ -5914,6 +5943,7 @@ impl Application for App {
             }
             DialogPage::OpenWith {
                 path,
+                uri_opt,
                 mime,
                 selected,
                 store_opt,
@@ -6006,6 +6036,7 @@ impl Application for App {
                         .on_input(move |search_app_name| {
                             Message::DialogUpdate(DialogPage::OpenWith {
                                 path: path.clone(),
+                                uri_opt: uri_opt.clone(),
                                 mime: mime.clone(),
                                 selected: *selected,
                                 store_opt: store_opt.clone(),
