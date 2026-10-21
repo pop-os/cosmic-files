@@ -54,7 +54,6 @@ i18n-embed-fl = "0.10"
 rust-embed = "8"
 slotmap = "1.1.1"
 recently-used-xbel = "1.2.0"
-zip = "8"
 md-5 = "0.10.6"
 sha2 = "0.10"
 png = "0.18"
@@ -86,6 +85,22 @@ features = [
     "tokio",
     "winit",
     "surface-message",
+]
+
+# Default features - time + jiff
+[dependencies.zip]
+version = "9"
+default-features = false
+features = [
+    "aes-crypto",
+    "bzip2",
+    "deflate",
+    "deflate64",
+    "jiff-02",
+    "lzma",
+    "ppmd",
+    "xz",
+    "zstd"
 ]
 
 [[example]]
