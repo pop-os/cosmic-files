@@ -19,12 +19,8 @@ use cosmic::widget::menu::key_bind::KeyBind;
 use cosmic::widget::{self, DndDestination, DndSource, Id, RcElementWrapper, Widget, space};
 use cosmic::{Apply, Element, cosmic_theme, font, theme};
 use i18n_embed::LanguageLoader;
-use icu::datetime::input::DateTime;
-use icu::datetime::options::TimePrecision;
-use icu::datetime::{DateTimeFormatter, DateTimeFormatterPreferences, fieldsets};
-use icu::locale::preferences::extensions::unicode::keywords::HourCycle;
+use icu::datetime::{DateTimeFormatter, fieldsets};
 use image::{DynamicImage, ImageReader};
-use jiff_icu::ConvertFrom;
 use mime_guess::{Mime, mime};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -34,7 +30,7 @@ use std::cell::Cell;
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
-use std::fmt::{self, Display};
+use std::fmt::{self};
 use std::fs::{self, File, Metadata};
 use std::hash::Hash;
 use std::io::{BufRead, BufReader, Read};
@@ -59,7 +55,9 @@ use crate::large_image::{
     LargeImageManager, decode_large_image, exceeds_memory_limit, should_use_dedicated_worker,
     should_use_tiling,
 };
-use crate::localize::{LANGUAGE_SORTER, LOCALE};
+use crate::localize::{
+    FormatTime, LANGUAGE_SORTER, date_time_formatter, format_time, time_formatter,
+};
 use crate::mime_icon::{mime_for_path, mime_icon};
 use crate::mounter::MOUNTERS;
 use crate::operation::{Controller, OperationError};
@@ -376,92 +374,6 @@ const fn get_mode_part(mode: u32, shift: u32) -> u32 {
 fn set_mode_part(mode: u32, shift: u32, bits: u32) -> u32 {
     assert!(bits <= 0o7);
     (mode & !(0o7 << shift)) | (bits << shift)
-}
-
-fn date_time_formatter(military_time: bool) -> DateTimeFormatter<fieldsets::YMDT> {
-    let mut prefs = DateTimeFormatterPreferences::from(LOCALE.clone());
-    prefs.hour_cycle = Some(if military_time {
-        HourCycle::H23
-    } else {
-        HourCycle::H12
-    });
-
-    let mut fs = fieldsets::YMDT::medium();
-    fs = fs.with_time_precision(TimePrecision::Minute);
-
-    DateTimeFormatter::try_new(prefs, fs).expect("failed to create DateTimeFormatter")
-}
-
-fn time_formatter(military_time: bool) -> DateTimeFormatter<fieldsets::T> {
-    let mut prefs = DateTimeFormatterPreferences::from(LOCALE.clone());
-    prefs.hour_cycle = Some(if military_time {
-        HourCycle::H23
-    } else {
-        HourCycle::H12
-    });
-
-    let mut fs = fieldsets::T::medium();
-    fs = fs.with_time_precision(TimePrecision::Minute);
-
-    DateTimeFormatter::try_new(prefs, fs).expect("failed to create DateTimeFormatter")
-}
-
-struct FormatTime<'a> {
-    pub time: SystemTime,
-    pub date_time_formatter: &'a DateTimeFormatter<fieldsets::YMDT>,
-    pub time_formatter: &'a DateTimeFormatter<fieldsets::T>,
-}
-
-impl<'a> FormatTime<'a> {
-    fn from_secs(
-        secs: i64,
-        date_time_formatter: &'a DateTimeFormatter<fieldsets::YMDT>,
-        time_formatter: &'a DateTimeFormatter<fieldsets::T>,
-    ) -> Option<Self> {
-        // This looks convoluted because we need to ensure the units match up
-        let secs: u64 = secs.try_into().ok()?;
-        let now = SystemTime::now();
-        let filetime_diff = now
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map(|from_epoch| from_epoch.as_secs())
-            .ok()
-            .and_then(|now_secs| now_secs.checked_sub(secs))
-            .map(Duration::from_secs)?;
-        now.checked_sub(filetime_diff).map(|time| Self {
-            time,
-            date_time_formatter,
-            time_formatter,
-        })
-    }
-}
-
-impl Display for FormatTime<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Ok(zoned) = jiff::Zoned::try_from(self.time) else {
-            return Ok(());
-        };
-        let now = jiff::Zoned::now();
-        let icu_datetime = DateTime::convert_from(zoned.datetime());
-        if zoned.date() == now.date() {
-            f.write_str(fl!("today").as_str())?;
-            f.write_str(", ")?;
-            self.time_formatter.format(&icu_datetime).fmt(f)
-        } else {
-            self.date_time_formatter.format(&icu_datetime).fmt(f)
-        }
-    }
-}
-
-const fn format_time<'a>(
-    time: SystemTime,
-    date_time_formatter: &'a DateTimeFormatter<fieldsets::YMDT>,
-    time_formatter: &'a DateTimeFormatter<fieldsets::T>,
-) -> FormatTime<'a> {
-    FormatTime {
-        time,
-        date_time_formatter,
-        time_formatter,
-    }
 }
 
 #[cfg(not(target_os = "windows"))]
