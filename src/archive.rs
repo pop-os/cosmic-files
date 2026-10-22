@@ -46,7 +46,9 @@ pub fn extract(
     password: &Option<String>,
     controller: &Controller,
 ) -> Result<(Vec<PathBuf>, HashSet<PathBuf>), OperationError> {
-    let mime = mime_for_path(path, None, false);
+    // Detect MIME type via magic bytes rather than file extension. Slower,
+    // but ensures accurate decompression even if the file extension is wrong.
+    let mime = mime_from_bytes(path);
     let password = password.as_deref();
     match mime.essence_str() {
         "application/gzip" | "application/x-compressed-tar" => {
@@ -104,6 +106,15 @@ pub fn extract(
             controller,
         )),
     }
+}
+
+fn mime_from_bytes(path: &Path) -> mime_guess::Mime {
+    let type_opt = infer::get_from_path(path).ok().flatten();
+
+    // fallback to mime_for_path on failed, empty, or invalid magic byte detection
+    type_opt
+        .and_then(|t| t.mime_type().parse::<mime_guess::Mime>().ok())
+        .unwrap_or_else(|| mime_for_path(path, None, false))
 }
 
 // From https://docs.rs/zip/latest/zip/read/struct.ZipArchive.html#method.extract, with cancellation and progress added
