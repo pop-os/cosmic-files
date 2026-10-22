@@ -40,6 +40,10 @@ operations-running-finished = {$running} {$running ->
     [one] operation
     *[other] operations
   } running ({$percent}%), {$finished} finished...
+operations-running-background = {$running} {$running ->
+    [one] operation
+    *[other] operations
+  } running in the background
 pause = Pause
 resume = Resume
 
