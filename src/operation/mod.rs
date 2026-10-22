@@ -134,7 +134,7 @@ async fn copy_or_move(
 
         let from_to_pairs: Vec<(PathBuf, PathBuf)> = if matches!(method, Method::Move { .. }) {
             from_to_pairs_iter
-                .map(|(from, to)| async move {
+                .map(async |(from, to)| {
                     //TODO: show replace dialog here?
                     if to.exists() {
                         return Some((from, to));
@@ -157,7 +157,7 @@ async fn copy_or_move(
                     }
                 })
                 .collect::<cosmic::iced::futures::stream::FuturesOrdered<_>>()
-                .fold(Vec::new(), |mut pairs, pair| async move {
+                .fold(Vec::new(), async |mut pairs, pair| {
                     if let Some(pair) = pair {
                         pairs.push(pair);
                     }
@@ -218,7 +218,7 @@ pub async fn sync_to_disk(
     target_dirs: std::collections::HashSet<PathBuf>,
 ) {
     // Sync files to disk
-    stream::iter(written_files.into_iter().map(|path| async move {
+    stream::iter(written_files.into_iter().map(async |path| {
         if let Ok(file) = compio::fs::OpenOptions::new().write(true).open(&path).await {
             let _ = file.sync_all().await;
         }
@@ -228,7 +228,7 @@ pub async fn sync_to_disk(
     .await;
 
     // Sync directories to disk
-    stream::iter(target_dirs.into_iter().map(|path| async move {
+    stream::iter(target_dirs.into_iter().map(async |path| {
         if let Ok(dir) = compio::fs::OpenOptions::new().read(true).open(&path).await {
             let _ = dir.sync_all().await;
         }
@@ -707,12 +707,8 @@ impl Operation {
 
                                 let total_paths = paths.len();
                                 for (i, path) in paths.iter().enumerate() {
-                                    futures::executor::block_on(async {
-                                        controller
-                                            .check()
-                                            .await
-                                            .map_err(|e| OperationError::from_state(e, &controller))
-                                    })?;
+                                    futures::executor::block_on(controller.check())
+                                        .map_err(|e| OperationError::from_state(e, &controller))?;
 
                                     controller.set_progress((i as f32) / total_paths as f32);
 
@@ -742,12 +738,8 @@ impl Operation {
                                 let total_paths = paths.len();
                                 let mut buffer = vec![0; 4 * 1024 * 1024];
                                 for (i, path) in paths.iter().enumerate() {
-                                    futures::executor::block_on(async {
-                                        controller
-                                            .check()
-                                            .await
-                                            .map_err(|s| OperationError::from_state(s, &controller))
-                                    })?;
+                                    futures::executor::block_on(controller.check())
+                                        .map_err(|e| OperationError::from_state(e, &controller))?;
 
                                     controller.set_progress((i as f32) / total_paths as f32);
 
@@ -798,11 +790,8 @@ impl Operation {
                                                 })?;
                                             let mut current = 0;
                                             loop {
-                                                futures::executor::block_on(async {
-                                                    controller.check().await.map_err(|s| {
-                                                        OperationError::from_state(s, &controller)
-                                                    })
-                                                })?;
+                                                futures::executor::block_on(controller.check())
+                                                    .map_err(|e| OperationError::from_state(e, &controller))?;
 
                                                 let count =
                                                     file.read(&mut buffer).map_err(|e| {
@@ -849,12 +838,8 @@ impl Operation {
             Self::Delete { paths } => {
                 let total = paths.len();
                 for (i, path) in paths.into_iter().enumerate() {
-                    futures::executor::block_on(async {
-                        controller
-                            .check()
-                            .await
-                            .map_err(|s| OperationError::from_state(s, &controller))
-                    })?;
+                    futures::executor::block_on(controller.check())
+                        .map_err(|e| OperationError::from_state(e, &controller))?;
 
                     controller.set_progress((i as f32) / (total as f32));
 
@@ -881,12 +866,8 @@ impl Operation {
                         let controller = controller_clone;
                         let count = items.len();
                         for (i, item) in items.into_iter().enumerate() {
-                            futures::executor::block_on(async {
-                                controller
-                                    .check()
-                                    .await
-                                    .map_err(|s| OperationError::from_state(s, &controller))
-                            })?;
+                            futures::executor::block_on(controller.check())
+                                .map_err(|e| OperationError::from_state(e, &controller))?;
 
                             controller.set_progress(i as f32 / count as f32);
 
@@ -921,12 +902,8 @@ impl Operation {
                         let mut errors: Vec<trash::Error> = Vec::new();
 
                         for (i, item) in items.into_iter().enumerate() {
-                            futures::executor::block_on(async {
-                                controller
-                                    .check()
-                                    .await
-                                    .map_err(|s| OperationError::from_state(s, &controller))
-                            })?;
+                            futures::executor::block_on(controller.check())
+                                .map_err(|e| OperationError::from_state(e, &controller))?;
 
                             if let Err(e) = trash::os_limited::purge_all([item]) {
                                 errors.push(e);
@@ -975,12 +952,8 @@ impl Operation {
                         let mut written_files = Vec::new();
                         let mut target_dirs = std::collections::HashSet::new();
                         for (i, path) in paths.iter().enumerate() {
-                            futures::executor::block_on(async {
-                                controller
-                                    .check()
-                                    .await
-                                    .map_err(|s| OperationError::from_state(s, &controller))
-                            })?;
+                            futures::executor::block_on(controller.check())
+                                .map_err(|e| OperationError::from_state(e, &controller))?;
 
                             controller.set_progress((i as f32) / total_paths as f32);
 
