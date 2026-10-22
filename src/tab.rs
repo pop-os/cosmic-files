@@ -150,16 +150,29 @@ static SPECIAL_DIRS: LazyLock<FxHashMap<PathBuf, &'static str>> = LazyLock::new(
     special_dirs
 });
 
-fn button_appearance(
-    theme: &theme::Theme,
+#[derive(Clone, Copy)]
+struct ButtonAppearance {
     selected: bool,
     highlighted: bool,
     cut: bool,
-    focused: bool,
     accent: bool,
     condensed_radius: bool,
     desktop: bool,
+}
+
+fn button_appearance(
+    theme: &theme::Theme,
+    focused: bool,
+    properties: ButtonAppearance,
 ) -> widget::button::Style {
+    let ButtonAppearance {
+        selected,
+        highlighted,
+        cut,
+        accent,
+        condensed_radius,
+        desktop,
+    } = properties;
     let cosmic = theme.cosmic();
     let mut appearance = widget::button::Style::new();
     if selected {
@@ -227,55 +240,19 @@ fn button_style(
     desktop: bool,
 ) -> theme::Button {
     //TODO: move to libcosmic?
+    let appearance = ButtonAppearance {
+        selected,
+        highlighted,
+        cut,
+        accent,
+        condensed_radius,
+        desktop,
+    };
     theme::Button::Custom {
-        active: Box::new(move |focused, theme| {
-            button_appearance(
-                theme,
-                selected,
-                highlighted,
-                cut,
-                focused,
-                accent,
-                condensed_radius,
-                desktop,
-            )
-        }),
-        disabled: Box::new(move |theme| {
-            button_appearance(
-                theme,
-                selected,
-                highlighted,
-                cut,
-                false,
-                accent,
-                condensed_radius,
-                desktop,
-            )
-        }),
-        hovered: Box::new(move |focused, theme| {
-            button_appearance(
-                theme,
-                selected,
-                highlighted,
-                cut,
-                focused,
-                accent,
-                condensed_radius,
-                desktop,
-            )
-        }),
-        pressed: Box::new(move |focused, theme| {
-            button_appearance(
-                theme,
-                selected,
-                highlighted,
-                cut,
-                focused,
-                accent,
-                condensed_radius,
-                desktop,
-            )
-        }),
+        active: Box::new(move |focused, theme| button_appearance(theme, focused, appearance)),
+        disabled: Box::new(move |theme| button_appearance(theme, false, appearance)),
+        hovered: Box::new(move |focused, theme| button_appearance(theme, focused, appearance)),
+        pressed: Box::new(move |focused, theme| button_appearance(theme, focused, appearance)),
     }
 }
 
