@@ -73,8 +73,8 @@ pub const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32
 
 // Thumbnail generation semaphore - limits parallel thumbnail workers
 // Uses 4 workers for balanced throughput and memory usage
-pub static THUMB_SEMAPHORE: LazyLock<tokio::sync::Semaphore> =
-    LazyLock::new(|| tokio::sync::Semaphore::const_new(num_cpus::get().min(4)));
+pub static THUMB_SEMAPHORE: LazyLock<Arc<tokio::sync::Semaphore>> =
+    LazyLock::new(|| Arc::new(tokio::sync::Semaphore::new(num_cpus::get().min(4))));
 
 pub(crate) static SORT_OPTION_FALLBACK: LazyLock<FxHashMap<String, (HeadingOptions, bool)>> =
     LazyLock::new(|| {
@@ -4796,10 +4796,12 @@ impl Tab {
                                     let message = {
                                         let path = path.clone();
 
-                                        // Acquire semaphore permit
-                                        let _permit = THUMB_SEMAPHORE.acquire().await.unwrap();
+                                        // Held until the work is done, even if the folder is left
+                                        let permit =
+                                            THUMB_SEMAPHORE.clone().acquire_owned().await.unwrap();
 
                                         tokio::task::spawn_blocking(move || {
+                                            let _permit = permit;
                                             let start = Instant::now();
                                             let thumbnail = ItemThumbnail::new(
                                                 &path,
