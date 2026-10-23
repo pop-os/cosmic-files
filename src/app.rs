@@ -3974,7 +3974,7 @@ impl Application for App {
                 // Generate unique filename for the pasted image
                 let base_name = format!("{}.{}", fl!("pasted-image"), extension);
                 let base_path = to.join(&base_name);
-                let final_path = copy_unique_path(&base_path, &to);
+                let final_path = copy_unique_path(&base_path, &to, false);
 
                 // Write image data to file
                 match fs::write(&final_path, &contents.data) {
@@ -4009,7 +4009,7 @@ impl Application for App {
                 // Generate unique filename for the pasted video
                 let base_name = format!("{}.{}", fl!("pasted-video"), extension);
                 let base_path = to.join(&base_name);
-                let final_path = copy_unique_path(&base_path, &to);
+                let final_path = copy_unique_path(&base_path, &to, false);
 
                 // Write video data to file
                 match fs::write(&final_path, &contents.data) {
@@ -4035,7 +4035,7 @@ impl Application for App {
                 // Generate unique filename for the pasted text
                 let base_name = format!("{}.txt", fl!("pasted-text"));
                 let base_path = to.join(&base_name);
-                let final_path = copy_unique_path(&base_path, &to);
+                let final_path = copy_unique_path(&base_path, &to, false);
 
                 // Write text data to file
                 match fs::write(&final_path, &contents.data) {
