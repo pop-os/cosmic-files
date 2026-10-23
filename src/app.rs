@@ -454,6 +454,7 @@ pub enum Message {
         Vec<Item>,
         Option<Vec<PathBuf>>,
     ),
+    TabRescanFailed(Entity, Location),
     TabView(Option<Entity>, tab::View),
     TimeConfigChange(TimeConfig),
     ToggleContextPage(ContextPage),
@@ -670,6 +671,53 @@ pub struct FavoriteIndex(usize);
 
 pub struct MounterData(MounterKey, MounterItem);
 
+/// Merges the rescans of a location asked for while one is running
+#[derive(Default)]
+struct TabScans(FxHashMap<Entity, TabScan>);
+
+struct TabScan {
+    location: Location,
+    queued: Option<Option<Vec<PathBuf>>>,
+}
+
+impl TabScans {
+    fn start(
+        &mut self,
+        entity: Entity,
+        location: &Location,
+        selection_paths: Option<Vec<PathBuf>>,
+    ) -> Option<Option<Vec<PathBuf>>> {
+        if let Some(scan) = self.0.get_mut(&entity)
+            && scan.location == *location
+        {
+            let queued = scan.queued.get_or_insert(None);
+            if selection_paths.is_some() {
+                *queued = selection_paths;
+            }
+            return None;
+        }
+        self.0.insert(
+            entity,
+            TabScan {
+                location: location.clone(),
+                queued: None,
+            },
+        );
+        Some(selection_paths)
+    }
+
+    fn finish(&mut self, entity: Entity, location: &Location) -> Option<Option<Vec<PathBuf>>> {
+        if self
+            .0
+            .get(&entity)
+            .is_none_or(|scan| scan.location != *location)
+        {
+            return None;
+        }
+        self.0.remove(&entity)?.queued
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 struct NavPathType {
     is_dir: bool,
@@ -781,6 +829,7 @@ pub struct App {
     clipboard_cache: ClipboardCache,
     has_recents: bool,
     trash_is_empty: bool,
+    tab_scans: TabScans,
 }
 
 impl App {
@@ -1488,6 +1537,10 @@ impl App {
         location: Location,
         selection_paths: Option<Vec<PathBuf>>,
     ) -> Task<Message> {
+        let Some(selection_paths) = self.tab_scans.start(entity, &location, selection_paths) else {
+            return Task::none();
+        };
+
         log::info!("rescan_tab {entity:?} {location:?} {selection_paths:?}");
         let icon_sizes = self.config.tab.icon_sizes;
         let mounter_items = self.mounter_items.clone();
@@ -1521,10 +1574,17 @@ impl App {
                 }
                 Err(err) => {
                     log::warn!("failed to rescan: {err}");
-                    cosmic::action::none()
+                    cosmic::action::app(Message::TabRescanFailed(entity, location))
                 }
             }
         })
+    }
+
+    fn finish_tab_scan(&mut self, entity: Entity, location: &Location) -> Task<Message> {
+        match self.tab_scans.finish(entity, location) {
+            Some(selection_paths) => self.rescan_tab(entity, location.clone(), selection_paths),
+            None => Task::none(),
+        }
     }
 
     fn rescan_trash(&mut self) -> Task<Message> {
@@ -2473,6 +2533,7 @@ impl Application for App {
             clipboard_cache: ClipboardCache::Empty,
             has_recents: false,
             trash_is_empty: false,
+            tab_scans: TabScans::default(),
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
         };
@@ -4667,6 +4728,7 @@ impl Application for App {
                 return self.open_tab(location, true, None);
             }
             Message::TabRescan(entity, mut location, parent_item_opt, items, selection_paths) => {
+                let next_scan = self.finish_tab_scan(entity, &location);
                 location = location.normalize();
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                     tab.location = tab.location.normalize();
@@ -4684,7 +4746,8 @@ impl Application for App {
                         tab.sort_name = sort.0;
                         tab.sort_direction = sort.1;
 
-                        let mut tasks = Vec::with_capacity(2);
+                        let mut tasks = Vec::with_capacity(3);
+                        tasks.push(next_scan);
 
                         if let Some(selection_paths) = selection_paths {
                             tab.select_paths(selection_paths);
@@ -4709,6 +4772,10 @@ impl Application for App {
                         return Task::batch(tasks);
                     }
                 }
+                return next_scan;
+            }
+            Message::TabRescanFailed(entity, location) => {
+                return self.finish_tab_scan(entity, &location);
             }
             Message::TabView(entity_opt, view) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -7243,5 +7310,40 @@ pub(crate) mod test_utils {
             path.display(),
             tab_path.display()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cosmic::widget::segmented_button::Entity;
+    use slotmap::SlotMap;
+    use std::path::PathBuf;
+
+    use super::TabScans;
+    use crate::location::Location;
+
+    #[test]
+    fn tab_scans_merge_requests_for_the_same_location() {
+        let mut entities = SlotMap::<Entity, ()>::with_key();
+        let (tab, other_tab) = (entities.insert(()), entities.insert(()));
+        let a = Location::Path(PathBuf::from("/a"));
+        let b = Location::Path(PathBuf::from("/b"));
+        let selection = Some(vec![PathBuf::from("/a/x")]);
+        let mut scans = TabScans::default();
+
+        assert_eq!(scans.start(tab, &a, None), Some(None));
+        assert_eq!(scans.start(tab, &a, selection.clone()), None);
+        assert_eq!(scans.start(tab, &a, None), None);
+        assert_eq!(scans.start(other_tab, &a, None), Some(None));
+
+        assert_eq!(scans.finish(tab, &a), Some(selection.clone()));
+        assert_eq!(scans.start(tab, &a, selection.clone()), Some(selection));
+        assert_eq!(scans.finish(tab, &a), None);
+
+        assert_eq!(scans.start(tab, &a, None), Some(None));
+        assert_eq!(scans.start(tab, &b, None), Some(None));
+        assert_eq!(scans.finish(tab, &a), None);
+        assert_eq!(scans.start(tab, &b, None), None);
+        assert_eq!(scans.finish(tab, &b), Some(None));
     }
 }

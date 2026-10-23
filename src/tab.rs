@@ -28,7 +28,7 @@ use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, File};
@@ -564,7 +564,11 @@ pub struct Tab {
     time_formatter: DateTimeFormatter<fieldsets::T>,
     window_id: Option<window::Id>,
     large_image_manager: LargeImageManager,
+    items_cache: VecDeque<(Location, Vec<Item>)>,
 }
+
+const ITEMS_CACHE_LOCATIONS: usize = 3;
+const ITEMS_CACHE_ITEMS: usize = 10_000;
 
 async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, OperationError> {
     let mut total = 0;
@@ -667,6 +671,7 @@ impl Tab {
             time_formatter: time_formatter(config.military_time),
             window_id,
             large_image_manager: LargeImageManager::new(),
+            items_cache: VecDeque::new(),
         }
     }
 
@@ -739,19 +744,60 @@ impl Tab {
         false
     }
 
-    pub fn set_items(&mut self, mut items: Vec<Item>) {
-        let highlighted = self
-            .items_opt
-            .as_ref()
-            .and_then(|items| items.iter().enumerate().find(|i| i.1.state.highlighted))
-            .map(|(i, _)| i);
-        let selected: FxHashSet<Location> = self.selected_locations().into_iter().collect();
+    fn take_cached_items(&mut self) -> Option<Vec<Item>> {
+        let index = self
+            .items_cache
+            .iter()
+            .position(|(location, _)| *location == self.location)?;
+        let (_, mut items) = self.items_cache.remove(index)?;
         for item in &mut items {
             item.state.selected = false;
-            if let Some(location) = &item.location_opt
-                && selected.contains(location)
-            {
-                item.state.selected = true;
+            item.state.highlighted = false;
+            item.state.overlaps_drag_rect = false;
+            item.state.pos_opt.set(None);
+            item.state.rect_opt.set(None);
+        }
+        Some(items)
+    }
+
+    fn cache_items(&mut self, location: Location, items: Vec<Item>) {
+        self.items_cache.retain(|(cached, _)| *cached != location);
+        if items.len() > ITEMS_CACHE_ITEMS {
+            return;
+        }
+        self.items_cache.push_front((location, items));
+        let mut total = 0;
+        let keep = self
+            .items_cache
+            .iter()
+            .take(ITEMS_CACHE_LOCATIONS)
+            .take_while(|(_, items)| {
+                total += items.len();
+                total <= ITEMS_CACHE_ITEMS
+            })
+            .count();
+        self.items_cache.truncate(keep);
+    }
+
+    pub fn set_items(&mut self, mut items: Vec<Item>) {
+        let old_items = self.items_opt.take().unwrap_or_default();
+        let highlighted = old_items.iter().position(|item| item.state.highlighted);
+        let selected: FxHashSet<Location> = old_items
+            .iter()
+            .filter(|item| item.state.selected)
+            .filter_map(|item| item.location_opt.clone())
+            .collect();
+        let mut old_by_path: FxHashMap<PathBuf, Item> = old_items
+            .into_iter()
+            .filter_map(|item| Some((item.path_opt()?.clone(), item)))
+            .collect();
+        for item in &mut items {
+            item.state.selected = item
+                .location_opt
+                .as_ref()
+                .is_some_and(|location| selected.contains(location));
+            if let Some(old) = item.path_opt().and_then(|path| old_by_path.remove(path)) {
+                item.keep_loaded_from(old);
             }
         }
         self.items_opt = Some(items);
@@ -1235,11 +1281,21 @@ impl Tab {
     }
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
-        self.location = location.normalize();
+        let previous_location = std::mem::replace(&mut self.location, location.normalize());
         self.location_ancestors = self.location.ancestors();
         self.location_title = self.location.title();
         self.edit_location = None;
-        self.items_opt = None;
+        let previous_items = self.items_opt.take();
+        if previous_location == self.location {
+            self.items_opt = previous_items;
+        } else {
+            self.items_opt = self.take_cached_items();
+            if let Some(items) = previous_items
+                && !matches!(previous_location, Location::Search(..))
+            {
+                self.cache_items(previous_location, items);
+            }
+        }
         //TODO: remember scroll by location?
         self.scroll_opt = None;
         self.select_focus = None;
@@ -2684,6 +2740,11 @@ impl Tab {
                                 self.location.path_opt().map(|path| vec![path.clone()]);
                         }
                         self.change_location(&location, history_i_opt);
+                        if self.items_opt.is_some()
+                            && let Some(paths) = &selected_paths
+                        {
+                            self.select_paths(paths.clone());
+                        }
                         commands.push(Command::ChangeLocation(
                             self.title(),
                             location,
@@ -5787,6 +5848,119 @@ mod tests {
             .as_ref()
             .and_then(|items| items.iter().find(|item| item.name == name))
             .expect("tab should have the item")
+    }
+
+    fn handle_id(handle: &widget::icon::Handle) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        handle.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    #[test]
+    fn rescan_keeps_what_was_loaded_for_unchanged_files() -> io::Result<()> {
+        let fs = empty_fs()?;
+        let path = fs.path();
+        fs::write(path.join("same.txt"), "same")?;
+        fs::write(path.join("photo.png"), "not decoded by this test")?;
+        fs::write(path.join("changed.txt"), "before")?;
+        fs::create_dir(path.join("folder"))?;
+        fs::write(path.join("folder").join("child"), "")?;
+
+        let mut tab = new_tab(path);
+        rescan(&mut tab);
+        let mime_icon = handle_id(&item(&tab, "same.txt").icon_handle_grid);
+        let thumbnail = widget::image::Handle::from_path(path.join("photo.png"));
+        let thumbnail_icon = widget::icon::Handle {
+            symbolic: false,
+            data: widget::icon::Data::Image(thumbnail.clone()),
+        };
+        for item in tab.items_opt.as_mut().expect("tab should have items") {
+            item.thumbnail_opt = Some(if item.name == "photo.png" {
+                ItemThumbnail::Image(thumbnail.clone(), None)
+            } else {
+                ItemThumbnail::NotImage
+            });
+            item.icon_handle_grid = thumbnail_icon.clone();
+        }
+
+        fs::write(path.join("changed.txt"), "after, with more bytes")?;
+        rescan(&mut tab);
+        assert!(item(&tab, "same.txt").thumbnail_opt.is_some());
+        assert_eq!(
+            handle_id(&item(&tab, "same.txt").icon_handle_grid),
+            mime_icon
+        );
+        assert!(matches!(
+            item(&tab, "photo.png").thumbnail_opt,
+            Some(ItemThumbnail::Image(..))
+        ));
+        assert_eq!(
+            handle_id(&item(&tab, "photo.png").icon_handle_grid),
+            handle_id(&thumbnail_icon)
+        );
+        assert!(item(&tab, "folder").thumbnail_opt.is_some());
+        assert!(item(&tab, "changed.txt").thumbnail_opt.is_none());
+
+        let uncounted = |tab: &Tab| {
+            let (_, mut items) = tab.location.scan(IconSizes::default());
+            for item in &mut items {
+                if let ItemMetadata::Path { children_opt, .. } = &mut item.metadata {
+                    *children_opt = None;
+                }
+            }
+            items
+        };
+        assert_eq!(item(&tab, "folder").metadata.children_count(), Some(&1));
+        tab.set_items(uncounted(&tab));
+        assert_eq!(item(&tab, "folder").metadata.children_count(), Some(&1));
+        fs::write(path.join("folder").join("new child"), "")?;
+        tab.set_items(uncounted(&tab));
+        assert_eq!(item(&tab, "folder").metadata.children_count(), None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn going_back_shows_the_cached_listing() -> io::Result<()> {
+        let fs = simple_fs(NUM_FILES, NUM_HIDDEN, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
+        let path = fs.path();
+        let child = filter_dirs(path)?.next().expect("there should be a folder");
+
+        let mut tab = new_tab(path);
+        rescan(&mut tab);
+        let parent_names: Vec<_> = tab
+            .items_opt
+            .iter()
+            .flatten()
+            .map(|item| item.name.clone())
+            .collect();
+
+        tab.update(
+            Message::Location(Location::Path(child.clone())),
+            Modifiers::empty(),
+        );
+        assert!(tab.items_opt.is_none());
+        rescan(&mut tab);
+
+        tab.update(Message::GoPrevious, Modifiers::empty());
+        let items = tab
+            .items_opt
+            .as_ref()
+            .expect("parent listing should be cached");
+        let names: Vec<_> = items.iter().map(|item| item.name.clone()).collect();
+        assert_eq!(names, parent_names);
+        let selected: Vec<_> = items
+            .iter()
+            .filter(|item| item.state.selected)
+            .filter_map(|item| item.path_opt())
+            .collect();
+        assert_eq!(selected, [&child]);
+
+        tab.update(Message::GoNext, Modifiers::empty());
+        assert!(tab.items_opt.is_some());
+
+        Ok(())
     }
 
     #[test]
