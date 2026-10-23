@@ -81,7 +81,7 @@ use crate::tab::{
 };
 use crate::trash::{Trash, TrashExt, trash_icon_symbolic};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
-use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon};
+use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon, recents};
 
 static PERMANENT_DELETE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("permanent-delete-button"));
@@ -879,22 +879,17 @@ impl App {
             }
 
             // Fall back to using open crate
+            let mut opened = Vec::with_capacity(paths.len());
             for path in paths {
                 match open::that_detached(&path) {
-                    Ok(()) => {
-                        if self.config.show_recents {
-                            let _ = recently_used_xbel::update_recently_used(
-                                &path,
-                                Self::APP_ID.to_string(),
-                                "cosmic-files".to_string(),
-                                None,
-                            );
-                        }
-                    }
+                    Ok(()) => opened.push(path),
                     Err(err) => {
                         log::warn!("failed to open {}: {}", path.display(), err);
                     }
                 }
+            }
+            if self.config.show_recents {
+                recents::add(opened, Self::APP_ID);
             }
         }
 
@@ -965,14 +960,7 @@ impl App {
                 match spawn_detached(&mut command) {
                     Ok(()) => {
                         if self.config.show_recents {
-                            for path in paths {
-                                let _ = recently_used_xbel::update_recently_used(
-                                    &path.into(),
-                                    Self::APP_ID.to_string(),
-                                    "cosmic-files".to_string(),
-                                    None,
-                                );
-                            }
+                            recents::add(paths.iter().map(PathBuf::from).collect(), Self::APP_ID);
                         }
 
                         return true;
@@ -3285,12 +3273,7 @@ impl Application for App {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
                                             if self.config.show_recents {
-                                                let _ = recently_used_xbel::update_recently_used(
-                                                    &path,
-                                                    Self::APP_ID.to_string(),
-                                                    "cosmic-files".to_string(),
-                                                    None,
-                                                );
+                                                recents::add(vec![path.clone()], Self::APP_ID);
                                             }
                                         }
                                         Err(err) => {
@@ -3496,7 +3479,9 @@ impl Application for App {
             }
             Message::MaybeExit => {
                 if self.core.main_window_id().is_none() && self.pending_operations.is_empty() {
-                    // Exit if window is closed and there are no pending operations
+                    // Exit if window is closed and there are no pending operations. Holding the
+                    // recents lock waits for a write in progress and keeps others from starting.
+                    let _recents_lock = recents::lock();
                     process::exit(0);
                 }
             }
@@ -4610,14 +4595,7 @@ impl Application for App {
                         tab::Command::DropFiles(to, from) => {
                             commands.push(self.update(Message::PasteContents(to, from)));
                         }
-                        tab::Command::ClearRecents => {
-                            match recently_used_xbel::clear_recently_used() {
-                                Ok(()) => {}
-                                Err(err) => {
-                                    log::warn!("failed to clear recents history: {}", err);
-                                }
-                            }
-                        }
+                        tab::Command::ClearRecents => recents::clear(),
                         tab::Command::EmptyTrash => {
                             return self.push_dialog(
                                 DialogPage::EmptyTrash,
@@ -5093,12 +5071,7 @@ impl Application for App {
                 }
             }
             Message::NavMenuAction(action) => match action {
-                NavMenuAction::ClearRecents => match recently_used_xbel::clear_recently_used() {
-                    Ok(()) => {}
-                    Err(err) => {
-                        log::warn!("failed to clear recents history: {}", err);
-                    }
-                },
+                NavMenuAction::ClearRecents => recents::clear(),
                 NavMenuAction::EmptyTrash => {
                     return self
                         .push_dialog(DialogPage::EmptyTrash, Some(EMPTY_TRASH_BUTTON_ID.clone()));

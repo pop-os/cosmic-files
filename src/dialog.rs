@@ -22,7 +22,6 @@ use cosmic::{Application, ApplicationExt, Element, cosmic_config, cosmic_theme, 
 use mime_guess::{Mime, mime};
 use notify_debouncer_full::notify::{self, RecommendedWatcher};
 use notify_debouncer_full::{DebouncedEvent, Debouncer, RecommendedCache, new_debouncer};
-use recently_used_xbel::update_recently_used;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
@@ -41,7 +40,7 @@ use crate::localize::LANGUAGE_SORTER;
 use crate::mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage};
 use crate::tab::{self, HeadingOptions, ItemMetadata, Location, SearchLocation, Tab};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
-use crate::{fl, home_dir, menu, mime_icon};
+use crate::{fl, home_dir, menu, mime_icon, recents};
 
 #[derive(Clone, Debug)]
 pub struct DialogMessage(cosmic::Action<Message>);
@@ -1632,16 +1631,11 @@ impl Application for App {
                             && let Some(path) = item.path_opt()
                         {
                             paths.push(path.clone());
-                            if self.flags.config.show_recents {
-                                let _ = update_recently_used(
-                                    path,
-                                    Self::APP_ID.to_string(),
-                                    "cosmic-files".to_string(),
-                                    None,
-                                );
-                            }
                         }
                     }
+                }
+                if self.flags.config.show_recents {
+                    recents::add(paths.clone(), Self::APP_ID);
                 }
 
                 // Ensure selection is allowed
