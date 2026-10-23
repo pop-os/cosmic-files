@@ -79,9 +79,9 @@ use crate::tab::{
     self, HOVER_DURATION, HeadingOptions, ItemMetadata, Location, SORT_OPTION_FALLBACK,
     SearchLocation, Tab,
 };
-use crate::trash::{Trash, TrashExt};
+use crate::trash::{Trash, TrashExt, trash_icon_symbolic};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
-use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon};
+use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon, recents};
 
 static PERMANENT_DELETE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("permanent-delete-button"));
@@ -360,6 +360,7 @@ pub enum Message {
     ExtractToResult(DialogResult),
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Focused(window::Id),
+    HasRecents(bool),
     Key(window::Id, Modifiers, Key, Physical, Option<SmolStr>),
     LaunchUrl(String),
     MaybeExit,
@@ -453,11 +454,13 @@ pub enum Message {
         Vec<tab::Item>,
         Option<Vec<PathBuf>>,
     ),
+    TabRescanFailed(Entity, Location),
     TabView(Option<Entity>, tab::View),
     TimeConfigChange(TimeConfig),
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
     ToggleShowHidden,
+    TrashIsEmpty(bool),
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
@@ -668,6 +671,70 @@ pub struct FavoriteIndex(usize);
 
 pub struct MounterData(MounterKey, MounterItem);
 
+/// Scans of tab locations that have not returned yet. Changes keep coming while a folder is
+/// scanned (moving many files to the trash, a large copy): requests to scan the same location
+/// meanwhile are merged into a single scan, run once the current one returns, instead of all
+/// running at once.
+#[derive(Default)]
+struct TabScans(FxHashMap<Entity, TabScan>);
+
+struct TabScan {
+    location: Location,
+    /// Set when the location is asked to be scanned again meanwhile, with the paths to select
+    queued: Option<Option<Vec<PathBuf>>>,
+}
+
+impl TabScans {
+    /// Records a request to scan `location` in a tab. Returns the paths to select if the scan
+    /// must start now, or `None` if it is merged into the scan running for this location.
+    fn start(
+        &mut self,
+        entity: Entity,
+        location: &Location,
+        selection_paths: Option<Vec<PathBuf>>,
+    ) -> Option<Option<Vec<PathBuf>>> {
+        if let Some(scan) = self.0.get_mut(&entity)
+            && scan.location == *location
+        {
+            let queued = scan.queued.get_or_insert(None);
+            if selection_paths.is_some() {
+                *queued = selection_paths;
+            }
+            return None;
+        }
+        // A scan of another location is replaced: its result is ignored as the tab moved on
+        self.0.insert(
+            entity,
+            TabScan {
+                location: location.clone(),
+                queued: None,
+            },
+        );
+        Some(selection_paths)
+    }
+
+    /// Records that the scan of `location` in a tab returned. Returns the paths to select if
+    /// another scan was requested meanwhile and must start now.
+    fn finish(&mut self, entity: Entity, location: &Location) -> Option<Option<Vec<PathBuf>>> {
+        if self
+            .0
+            .get(&entity)
+            .is_none_or(|scan| scan.location != *location)
+        {
+            return None;
+        }
+        self.0.remove(&entity)?.queued
+    }
+}
+
+/// What the path of a sidebar entry points to. It is read once when the sidebar is built, because
+/// the sidebar context menus are rebuilt on every view and must not touch the filesystem.
+#[derive(Clone, Copy, Debug, Default)]
+struct NavPathType {
+    is_dir: bool,
+    is_file: bool,
+}
+
 #[derive(Clone, Debug)]
 pub enum WindowKind {
     Desktop(Entity),
@@ -771,6 +838,13 @@ pub struct App {
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
     clipboard_cache: ClipboardCache,
+    /// Whether the recents file has entries. Read in the background when it changes, so the
+    /// sidebar context menu does not parse it on every view.
+    has_recents: bool,
+    /// Whether the trash is empty. Read in the background when it changes, so the sidebar does
+    /// not scan every mount point on every view.
+    trash_is_empty: bool,
+    tab_scans: TabScans,
 }
 
 impl App {
@@ -863,22 +937,17 @@ impl App {
             }
 
             // Fall back to using open crate
+            let mut opened = Vec::with_capacity(paths.len());
             for path in paths {
                 match open::that_detached(&path) {
-                    Ok(()) => {
-                        if self.config.show_recents {
-                            let _ = recently_used_xbel::update_recently_used(
-                                &path,
-                                Self::APP_ID.to_string(),
-                                "cosmic-files".to_string(),
-                                None,
-                            );
-                        }
-                    }
+                    Ok(()) => opened.push(path),
                     Err(err) => {
                         log::warn!("failed to open {}: {}", path.display(), err);
                     }
                 }
+            }
+            if self.config.show_recents {
+                recents::add(opened, Self::APP_ID);
             }
         }
 
@@ -949,14 +1018,7 @@ impl App {
                 match spawn_detached(&mut command) {
                     Ok(()) => {
                         if self.config.show_recents {
-                            for path in paths {
-                                let _ = recently_used_xbel::update_recently_used(
-                                    &path.into(),
-                                    Self::APP_ID.to_string(),
-                                    "cosmic-files".to_string(),
-                                    None,
-                                );
-                            }
+                            recents::add(paths.iter().map(PathBuf::from).collect(), Self::APP_ID);
                         }
 
                         return true;
@@ -1402,6 +1464,8 @@ impl App {
         commands.push(self.rescan_operation_selection(op_sel));
         // Manually rescan any trash tabs after any operation is completed
         commands.push(self.rescan_trash());
+        // The trash may not have been watched yet if it did not exist on startup
+        commands.push(self.check_trash());
 
         Task::batch(commands)
     }
@@ -1448,6 +1512,7 @@ impl App {
         }
         // Manually rescan any trash tabs after any operation is completed
         tasks.push(self.rescan_trash());
+        tasks.push(self.check_trash());
         Task::batch(tasks)
     }
 
@@ -1469,10 +1534,12 @@ impl App {
         let Some(items) = tab.items_opt() else {
             return Task::none();
         };
+        let operation_paths: FxHashSet<&PathBuf> =
+            op_sel.selected.iter().chain(&op_sel.ignored).collect();
         for item in items {
             if item.selected {
                 if let Some(path) = item.path_opt()
-                    && (op_sel.selected.contains(path) || op_sel.ignored.contains(path))
+                    && operation_paths.contains(path)
                 {
                     // Ignore if path in selected or ignored paths
                     continue;
@@ -1504,6 +1571,10 @@ impl App {
         location: Location,
         selection_paths: Option<Vec<PathBuf>>,
     ) -> Task<Message> {
+        let Some(selection_paths) = self.tab_scans.start(entity, &location, selection_paths) else {
+            return Task::none();
+        };
+
         log::info!("rescan_tab {entity:?} {location:?} {selection_paths:?}");
         let icon_sizes = self.config.tab.icon_sizes;
         let mounter_items = self.mounter_items.clone();
@@ -1537,10 +1608,18 @@ impl App {
                 }
                 Err(err) => {
                     log::warn!("failed to rescan: {err}");
-                    cosmic::action::none()
+                    cosmic::action::app(Message::TabRescanFailed(entity, location))
                 }
             }
         })
+    }
+
+    /// Marks the scan of `location` in the tab as done, and starts the scan requested meanwhile
+    fn finish_tab_scan(&mut self, entity: Entity, location: &Location) -> Task<Message> {
+        match self.tab_scans.finish(entity, location) {
+            Some(selection_paths) => self.rescan_tab(entity, location.clone(), selection_paths),
+            None => Task::none(),
+        }
     }
 
     fn rescan_trash(&mut self) -> Task<Message> {
@@ -1560,6 +1639,32 @@ impl App {
             .map(|(entity, location)| self.update_tab(entity, location, None));
 
         Task::batch(commands)
+    }
+
+    /// Reads in the background whether the recents file has entries, for the sidebar.
+    fn check_recents(&self) -> Task<Message> {
+        if !self.config.show_recents || matches!(self.mode, Mode::Desktop) {
+            return Task::none();
+        }
+        Task::future(async {
+            let has_recents = tokio::task::spawn_blocking(tab::has_recents)
+                .await
+                .unwrap_or_default();
+            cosmic::action::app(Message::HasRecents(has_recents))
+        })
+    }
+
+    /// Reads in the background whether the trash is empty, for the sidebar.
+    fn check_trash(&self) -> Task<Message> {
+        if matches!(self.mode, Mode::Desktop) {
+            return Task::none();
+        }
+        Task::future(async {
+            let is_empty = tokio::task::spawn_blocking(Trash::is_empty)
+                .await
+                .unwrap_or(true);
+            cosmic::action::app(Message::TrashIsEmpty(is_empty))
+        })
     }
 
     fn rescan_recents(&mut self) -> Task<Message> {
@@ -1748,10 +1853,17 @@ impl App {
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
                 let name = favorite.display_name().unwrap_or_else(|| fl!("filesystem"));
+                let path_type = fs::metadata(&path).map_or_else(
+                    |_| NavPathType::default(),
+                    |metadata| NavPathType {
+                        is_dir: metadata.is_dir(),
+                        is_file: metadata.is_file(),
+                    },
+                );
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
                         .icon(
-                            icon::icon(if path.is_dir() {
+                            icon::icon(if path_type.is_dir {
                                 tab::folder_icon_symbolic(&path, 16)
                             } else {
                                 icon::from_name("text-x-generic-symbolic").size(16).handle()
@@ -1765,13 +1877,14 @@ impl App {
                             _ => Location::Path(path.clone()),
                         })
                         .data(FavoriteIndex(favorite_i))
+                        .data(path_type)
                 });
             }
         }
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("trash"))
-                .icon(icon::icon(Trash::icon_symbolic(16)))
+                .icon(icon::icon(trash_icon_symbolic(self.trash_is_empty, 16)))
                 .data(Location::Trash)
                 .divider_above()
         });
@@ -1811,6 +1924,11 @@ impl App {
                     } else {
                         b = b.data(Location::Path(path));
                     }
+                    // Only mounted items have a path, and it is the root directory of the mount
+                    b = b.data(NavPathType {
+                        is_dir: true,
+                        is_file: false,
+                    });
                 } else if !uri.is_empty() {
                     b = b.data(Location::Network(uri, item.name(), None));
                 }
@@ -2451,11 +2569,19 @@ impl Application for App {
             auto_scroll_speed: None,
             file_dialog_opt: None,
             clipboard_cache: ClipboardCache::Empty,
+            has_recents: false,
+            trash_is_empty: false,
+            tab_scans: TabScans::default(),
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
         };
 
-        let mut commands = vec![app.update_config(), app.update(Message::CheckClipboard)];
+        let mut commands = vec![
+            app.update_config(),
+            app.update(Message::CheckClipboard),
+            app.check_recents(),
+            app.check_trash(),
+        ];
 
         for location in flags.locations {
             if let Some(path) = location.path_opt()
@@ -2536,17 +2662,21 @@ impl Application for App {
         ))
     }
 
+    // Called on every view: everything here must come from memory, never from the filesystem.
     fn nav_context_menu(&self) -> Option<Vec<widget::menu::Tree<cosmic::Action<Self::Message>>>> {
         let items = self.nav_model.iter().map(|entity| {
             let favorite_index_opt = self.nav_model.data::<FavoriteIndex>(entity);
             let location_opt = self.nav_model.data::<Location>(entity);
+            let path_type = self
+                .nav_model
+                .data::<NavPathType>(entity)
+                .copied()
+                .unwrap_or_default();
+            let has_path = location_opt.and_then(Location::path_opt).is_some();
 
             let mut items: Vec<widget::menu::Item<NavMenuAction, String>> = Vec::with_capacity(7);
 
-            if location_opt
-                .and_then(Location::path_opt)
-                .is_some_and(|x| x.is_file())
-            {
+            if has_path && path_type.is_file {
                 items.push(cosmic::widget::menu::Item::Button(
                     fl!("open"),
                     None,
@@ -2569,8 +2699,8 @@ impl Application for App {
                     NavMenuAction::OpenInNewWindow(entity),
                 ));
             }
-            if let Some(path) = location_opt.and_then(Location::path_opt) {
-                let selected_dir = usize::from(path.is_dir());
+            if has_path {
+                let selected_dir = usize::from(path_type.is_dir);
                 let action_items: Vec<_> = self
                     .config
                     .context_actions
@@ -2613,7 +2743,7 @@ impl Application for App {
                 ));
             }
 
-            if matches!(location_opt, Some(Location::Recents)) && tab::has_recents() {
+            if matches!(location_opt, Some(Location::Recents)) && self.has_recents {
                 items.push(cosmic::widget::menu::Item::Button(
                     fl!("clear-recents-history"),
                     None,
@@ -2621,7 +2751,7 @@ impl Application for App {
                 ));
             }
 
-            if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty() {
+            if matches!(location_opt, Some(Location::Trash)) && !self.trash_is_empty {
                 items.push(cosmic::widget::menu::Item::Button(
                     fl!("empty-trash"),
                     None,
@@ -2920,12 +3050,16 @@ impl Application for App {
             Message::Config(config) => {
                 if config != self.config {
                     log::info!("update config");
+                    let recents_shown = config.show_recents && !self.config.show_recents;
                     // Show details and military time are preserved for existing instances
                     let show_details = self.config.show_details;
                     let military_time = self.config.tab.military_time;
                     self.config = config;
                     self.config.show_details = show_details;
                     self.config.tab.military_time = military_time;
+                    if recents_shown {
+                        return Task::batch([self.update_config(), self.check_recents()]);
+                    }
                     return self.update_config();
                 }
             }
@@ -3212,12 +3346,7 @@ impl Application for App {
                                     match spawn_detached(&mut command) {
                                         Ok(()) => {
                                             if self.config.show_recents {
-                                                let _ = recently_used_xbel::update_recently_used(
-                                                    &path,
-                                                    Self::APP_ID.to_string(),
-                                                    "cosmic-files".to_string(),
-                                                    None,
-                                                );
+                                                recents::add(vec![path.clone()], Self::APP_ID);
                                             }
                                         }
                                         Err(err) => {
@@ -3342,6 +3471,9 @@ impl Application for App {
                     return dialog.update(dialog_message);
                 }
             }
+            Message::HasRecents(has_recents) => {
+                self.has_recents = has_recents;
+            }
             Message::Key(window_id, modifiers, key, physical_key, text) => {
                 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                 let in_surface_ids = self.surface_ids.values().any(|id| *id == window_id);
@@ -3420,7 +3552,9 @@ impl Application for App {
             }
             Message::MaybeExit => {
                 if self.core.main_window_id().is_none() && self.pending_operations.is_empty() {
-                    // Exit if window is closed and there are no pending operations
+                    // Exit if window is closed and there are no pending operations. Holding the
+                    // recents lock waits for a write in progress and keeps others from starting.
+                    let _recents_lock = recents::lock();
                     process::exit(0);
                 }
             }
@@ -3655,57 +3789,9 @@ impl Application for App {
                 let entities: Box<[_]> = self.tab_model.iter().collect();
                 for entity in entities {
                     if let Some(tab) = self.tab_model.data_mut::<Tab>(entity)
-                        && let Some(path) = tab.location.path_opt()
+                        && tab.apply_notify_events(&events)
                     {
-                        let mut contains_change = false;
-                        for event in &events {
-                            for event_path in &event.paths {
-                                if event_path.starts_with(path) {
-                                    if let notify::EventKind::Modify(
-                                        notify::event::ModifyKind::Metadata(_)
-                                        | notify::event::ModifyKind::Data(_),
-                                    ) = event.kind
-                                    {
-                                        // If metadata or data changed, find the matching item and reload it
-                                        //TODO: this could be further optimized by looking at what exactly changed
-                                        if let Some(items) = &mut tab.items_opt {
-                                            for item in items.iter_mut() {
-                                                if item.path_opt() == Some(event_path) {
-                                                    //TODO: reload more, like mime types?
-                                                    match fs::metadata(event_path) {
-                                                        Ok(new_metadata) => {
-                                                            if let ItemMetadata::Path {
-                                                                metadata,
-                                                                ..
-                                                            } = &mut item.metadata
-                                                            {
-                                                                *metadata = new_metadata;
-                                                            }
-                                                        }
-
-                                                        Err(err) => {
-                                                            log::warn!(
-                                                                "failed to reload metadata for {}: {}",
-                                                                path.display(),
-                                                                err
-                                                            );
-                                                        }
-                                                    }
-                                                    //TODO item.thumbnail_opt =
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        // Any other events reload the whole tab
-                                        contains_change = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if contains_change {
-                            needs_reload.push((entity, tab.location.clone()));
-                        }
+                        needs_reload.push((entity, tab.location.clone()));
                     }
                 }
 
@@ -4226,21 +4312,14 @@ impl Application for App {
                 self.mime_app_cache.reload();
             }
             Message::RescanRecents => {
-                return self.rescan_recents();
+                return Task::batch([self.rescan_recents(), self.check_recents()]);
             }
             Message::RescanTrash => {
-                // Update trash icon if empty/full
-                let maybe_entity = self.nav_model.iter().find(|&entity| {
-                    self.nav_model
-                        .data::<Location>(entity)
-                        .is_some_and(|loc| matches!(loc, Location::Trash))
-                });
-                if let Some(entity) = maybe_entity {
-                    self.nav_model
-                        .icon_set(entity, icon::icon(Trash::icon_symbolic(16)));
-                }
-
-                return Task::batch([self.rescan_trash(), self.update_desktop()]);
+                return Task::batch([
+                    self.check_trash(),
+                    self.rescan_trash(),
+                    self.update_desktop(),
+                ]);
             }
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -4353,7 +4432,7 @@ impl Application for App {
             }
             Message::SetShowRecents(show_recents) => {
                 config_set!(show_recents, show_recents);
-                return self.update_config();
+                return Task::batch([self.update_config(), self.check_recents()]);
             }
             Message::SetTypeToSearch(type_to_search) => {
                 config_set!(type_to_search, type_to_search);
@@ -4462,6 +4541,21 @@ impl Application for App {
                 config.show_hidden = !config.show_hidden;
                 return self.update(Message::TabConfig(config));
             }
+            Message::TrashIsEmpty(is_empty) => {
+                if is_empty != self.trash_is_empty {
+                    self.trash_is_empty = is_empty;
+                    // Update trash icon if empty/full
+                    let maybe_entity = self.nav_model.iter().find(|&entity| {
+                        self.nav_model
+                            .data::<Location>(entity)
+                            .is_some_and(|loc| matches!(loc, Location::Trash))
+                    });
+                    if let Some(entity) = maybe_entity {
+                        self.nav_model
+                            .icon_set(entity, icon::icon(trash_icon_symbolic(is_empty, 16)));
+                    }
+                }
+            }
             Message::TabMessage(entity_opt, tab_message) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
                 // The context menu opens on right-button release, so refresh paste availability now
@@ -4526,14 +4620,7 @@ impl Application for App {
                         tab::Command::DropFiles(to, from) => {
                             commands.push(self.update(Message::PasteContents(to, from)));
                         }
-                        tab::Command::ClearRecents => {
-                            match recently_used_xbel::clear_recently_used() {
-                                Ok(()) => {}
-                                Err(err) => {
-                                    log::warn!("failed to clear recents history: {}", err);
-                                }
-                            }
-                        }
+                        tab::Command::ClearRecents => recents::clear(),
                         tab::Command::EmptyTrash => {
                             return self.push_dialog(
                                 DialogPage::EmptyTrash,
@@ -4678,6 +4765,7 @@ impl Application for App {
                 return self.open_tab(location, true, None);
             }
             Message::TabRescan(entity, mut location, parent_item_opt, items, selection_paths) => {
+                let next_scan = self.finish_tab_scan(entity, &location);
                 location = location.normalize();
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                     tab.location = tab.location.normalize();
@@ -4695,7 +4783,8 @@ impl Application for App {
                         tab.sort_name = sort.0;
                         tab.sort_direction = sort.1;
 
-                        let mut tasks = Vec::with_capacity(2);
+                        let mut tasks = Vec::with_capacity(3);
+                        tasks.push(next_scan);
 
                         if let Some(selection_paths) = selection_paths {
                             tab.select_paths(selection_paths);
@@ -4720,6 +4809,10 @@ impl Application for App {
                         return Task::batch(tasks);
                     }
                 }
+                return next_scan;
+            }
+            Message::TabRescanFailed(entity, location) => {
+                return self.finish_tab_scan(entity, &location);
             }
             Message::TabView(entity_opt, view) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -5009,12 +5102,7 @@ impl Application for App {
                 }
             }
             Message::NavMenuAction(action) => match action {
-                NavMenuAction::ClearRecents => match recently_used_xbel::clear_recently_used() {
-                    Ok(()) => {}
-                    Err(err) => {
-                        log::warn!("failed to clear recents history: {}", err);
-                    }
-                },
+                NavMenuAction::ClearRecents => recents::clear(),
                 NavMenuAction::EmptyTrash => {
                     return self
                         .push_dialog(DialogPage::EmptyTrash, Some(EMPTY_TRASH_BUTTON_ID.clone()));
@@ -7327,5 +7415,44 @@ pub(crate) mod test_utils {
             path.display(),
             tab_path.display()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cosmic::widget::segmented_button::Entity;
+    use slotmap::SlotMap;
+    use std::path::PathBuf;
+
+    use super::TabScans;
+    use crate::tab::Location;
+
+    #[test]
+    fn tab_scans_merge_requests_for_the_same_location() {
+        let mut entities = SlotMap::<Entity, ()>::with_key();
+        let (tab, other_tab) = (entities.insert(()), entities.insert(()));
+        let a = Location::Path(PathBuf::from("/a"));
+        let b = Location::Path(PathBuf::from("/b"));
+        let selection = Some(vec![PathBuf::from("/a/x")]);
+        let mut scans = TabScans::default();
+
+        // The first request starts a scan, the next ones wait for it
+        assert_eq!(scans.start(tab, &a, None), Some(None));
+        assert_eq!(scans.start(tab, &a, selection.clone()), None);
+        assert_eq!(scans.start(tab, &a, None), None);
+        // Other tabs are independent
+        assert_eq!(scans.start(other_tab, &a, None), Some(None));
+
+        // Then a single scan runs for them, which keeps the paths to select
+        assert_eq!(scans.finish(tab, &a), Some(selection.clone()));
+        assert_eq!(scans.start(tab, &a, selection.clone()), Some(selection));
+        assert_eq!(scans.finish(tab, &a), None);
+
+        // Scanning another location replaces the scan, whose result is then ignored
+        assert_eq!(scans.start(tab, &a, None), Some(None));
+        assert_eq!(scans.start(tab, &b, None), Some(None));
+        assert_eq!(scans.finish(tab, &a), None);
+        assert_eq!(scans.start(tab, &b, None), None);
+        assert_eq!(scans.finish(tab, &b), Some(None));
     }
 }
