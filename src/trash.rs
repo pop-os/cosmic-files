@@ -57,16 +57,17 @@ pub trait TrashExt {
         .size(icon_size)
         .handle()
     }
+}
 
-    fn icon_symbolic(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name(if Self::is_empty() {
-            "user-trash-symbolic"
-        } else {
-            "user-trash-full-symbolic"
-        })
-        .size(icon_size)
-        .handle()
-    }
+/// Symbolic trash icon for a state read beforehand, as the sidebar must not touch the filesystem.
+pub fn trash_icon_symbolic(is_empty: bool, icon_size: u16) -> widget::icon::Handle {
+    widget::icon::from_name(if is_empty {
+        "user-trash-symbolic"
+    } else {
+        "user-trash-full-symbolic"
+    })
+    .size(icon_size)
+    .handle()
 }
 
 /// Derive the actual filesystem path of a trashed item from its .trashinfo path
