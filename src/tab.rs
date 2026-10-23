@@ -84,8 +84,8 @@ const TEXT_PREVIEW_MAX_FILE_BYTES: u64 = 8 * 1000 * 1000; // 8 MiB
 
 // Thumbnail generation semaphore - limits parallel thumbnail workers
 // Uses 4 workers for balanced throughput and memory usage
-pub static THUMB_SEMAPHORE: LazyLock<tokio::sync::Semaphore> =
-    LazyLock::new(|| tokio::sync::Semaphore::const_new(num_cpus::get().min(4)));
+pub static THUMB_SEMAPHORE: LazyLock<Arc<tokio::sync::Semaphore>> =
+    LazyLock::new(|| Arc::new(tokio::sync::Semaphore::new(num_cpus::get().min(4))));
 
 pub(crate) static SORT_OPTION_FALLBACK: LazyLock<FxHashMap<String, (HeadingOptions, bool)>> =
     LazyLock::new(|| {
@@ -1990,6 +1990,32 @@ impl Clone for ItemThumbnail {
     }
 }
 
+/// How long an external thumbnailer may run. A stuck one would otherwise hold a thread and one
+/// of the few thumbnail slots for good.
+const EXTERNAL_THUMBNAILER_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Runs `command` and waits for it, but kills it if it is still running after `timeout`, in
+/// which case `None` is returned
+fn run_with_timeout(
+    command: &mut std::process::Command,
+    timeout: Duration,
+) -> std::io::Result<Option<std::process::ExitStatus>> {
+    let mut child = command.spawn()?;
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(Some(status));
+        }
+        if Instant::now() >= deadline {
+            // Errors are ignored: it may have exited in the meantime
+            let _ = child.kill();
+            let _ = child.wait();
+            return Ok(None);
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 impl ItemThumbnail {
     pub fn new(
         path: &Path,
@@ -2273,8 +2299,15 @@ impl ItemThumbnail {
             let Some(mut command) = thumbnailer.command(path, file.path(), thumbnail_size) else {
                 continue;
             };
-            match command.status() {
-                Ok(status) => {
+            match run_with_timeout(&mut command, EXTERNAL_THUMBNAILER_TIMEOUT) {
+                Ok(None) => {
+                    log::warn!(
+                        "{thumbnailer:?} for {} did not finish in {:?}, killed it",
+                        path.display(),
+                        EXTERNAL_THUMBNAILER_TIMEOUT
+                    );
+                }
+                Ok(Some(status)) => {
                     if status.success() {
                         match image::ImageReader::open(file.path())
                             .and_then(ImageReader::with_guessed_format)
@@ -7107,10 +7140,15 @@ impl Tab {
                                     let message = {
                                         let path = path.clone();
 
-                                        // Acquire semaphore permit
-                                        let _permit = THUMB_SEMAPHORE.acquire().await.unwrap();
+                                        // The permit moves into the blocking task, which cannot be
+                                        // cancelled: it is released when the work is done, not when
+                                        // this subscription is dropped by leaving the folder. Else
+                                        // browsing quickly piles up decoding work.
+                                        let permit =
+                                            THUMB_SEMAPHORE.clone().acquire_owned().await.unwrap();
 
                                         tokio::task::spawn_blocking(move || {
+                                            let _permit = permit;
                                             let start = Instant::now();
                                             let thumbnail = ItemThumbnail::new(
                                                 &path,
@@ -7509,7 +7547,8 @@ mod tests {
     use test_log::test;
 
     use super::{
-        ItemMetadata, ItemThumbnail, Location, Message, Tab, respond_to_scroll_direction, scan_path,
+        ItemMetadata, ItemThumbnail, Location, Message, Tab, respond_to_scroll_direction,
+        run_with_timeout, scan_path,
     };
     use crate::app::test_utils::{
         NAME_LEN, NUM_DIRS, NUM_FILES, NUM_HIDDEN, NUM_NESTED, assert_eq_tab_path, empty_fs,
@@ -8011,6 +8050,25 @@ mod tests {
                 thumb
             ),
         }
+        Ok(())
+    }
+
+    #[test]
+    fn run_with_timeout_kills_stuck_commands() -> io::Result<()> {
+        let status = run_with_timeout(
+            &mut std::process::Command::new("true"),
+            std::time::Duration::from_secs(10),
+        )?;
+        assert!(status.is_some_and(|status| status.success()));
+
+        let start = std::time::Instant::now();
+        let status = run_with_timeout(
+            std::process::Command::new("sleep").arg("10"),
+            std::time::Duration::from_millis(100),
+        )?;
+        assert!(status.is_none());
+        assert!(start.elapsed() < std::time::Duration::from_secs(5));
+
         Ok(())
     }
 }
