@@ -1105,6 +1105,7 @@ impl Operation {
             Self::RemoveFromRecents { paths } => {
                 tokio::task::spawn_blocking(move || {
                     let path_refs = paths.iter().map(PathBuf::as_path).collect::<Box<[_]>>();
+                    let _lock = crate::recents::lock();
                     recently_used_xbel::remove_recently_used(&path_refs)
                 })
                 .await
