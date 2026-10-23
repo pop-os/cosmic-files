@@ -79,7 +79,7 @@ use crate::operation::{
 };
 use crate::spawn_detached::spawn_detached;
 use crate::tab::{self, HOVER_DURATION, HeadingOptions, SORT_OPTION_FALLBACK, Tab};
-use crate::trash::{Trash, TrashExt};
+use crate::trash::{Trash, TrashExt, trash_icon_symbolic};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
 use crate::{FxOrderMap, context_action, fl, home_dir, menu, mime_icon};
 
@@ -360,6 +360,7 @@ pub enum Message {
     ExtractToResult(DialogResult),
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Focused(window::Id),
+    HasRecents(bool),
     Key(window::Id, Modifiers, Key, Physical, Option<SmolStr>),
     LaunchUrl(String),
     MaybeExit,
@@ -458,6 +459,7 @@ pub enum Message {
     ToggleContextPage(ContextPage),
     ToggleFoldersFirst,
     ToggleShowHidden,
+    TrashIsEmpty(bool),
     Undo(usize),
     UndoTrash(widget::ToastId, Arc<[PathBuf]>),
     UndoTrashStart(Vec<TrashItem>),
@@ -668,6 +670,12 @@ pub struct FavoriteIndex(usize);
 
 pub struct MounterData(MounterKey, MounterItem);
 
+#[derive(Clone, Copy, Debug, Default)]
+struct NavPathType {
+    is_dir: bool,
+    is_file: bool,
+}
+
 #[derive(Clone, Debug)]
 pub enum WindowKind {
     Desktop(Entity),
@@ -771,6 +779,8 @@ pub struct App {
     auto_scroll_speed: Option<i16>,
     file_dialog_opt: Option<Dialog<Message>>,
     clipboard_cache: ClipboardCache,
+    has_recents: bool,
+    trash_is_empty: bool,
 }
 
 impl App {
@@ -1546,6 +1556,30 @@ impl App {
         Task::batch(commands)
     }
 
+    fn check_recents(&self) -> Task<Message> {
+        if !self.config.show_recents || matches!(self.mode, Mode::Desktop) {
+            return Task::none();
+        }
+        Task::future(async {
+            let has_recents = tokio::task::spawn_blocking(has_recents)
+                .await
+                .unwrap_or_default();
+            cosmic::action::app(Message::HasRecents(has_recents))
+        })
+    }
+
+    fn check_trash(&self) -> Task<Message> {
+        if matches!(self.mode, Mode::Desktop) {
+            return Task::none();
+        }
+        Task::future(async {
+            let is_empty = tokio::task::spawn_blocking(Trash::is_empty)
+                .await
+                .unwrap_or(true);
+            cosmic::action::app(Message::TrashIsEmpty(is_empty))
+        })
+    }
+
     fn rescan_recents(&mut self) -> Task<Message> {
         let needs_reload: Box<[_]> = self
             .tab_model
@@ -1732,10 +1766,17 @@ impl App {
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
                 let name = favorite.display_name().unwrap_or_else(|| fl!("filesystem"));
+                let path_type = fs::metadata(&path).map_or_else(
+                    |_| NavPathType::default(),
+                    |metadata| NavPathType {
+                        is_dir: metadata.is_dir(),
+                        is_file: metadata.is_file(),
+                    },
+                );
                 nav_model = nav_model.insert(move |b| {
                     b.text(name.clone())
                         .icon(
-                            icon::icon(if path.is_dir() {
+                            icon::icon(if path_type.is_dir {
                                 folder_icon_symbolic(&path, 16)
                             } else {
                                 icon::from_name("text-x-generic-symbolic").size(16).handle()
@@ -1749,13 +1790,14 @@ impl App {
                             _ => Location::Path(path.clone()),
                         })
                         .data(FavoriteIndex(favorite_i))
+                        .data(path_type)
                 });
             }
         }
 
         nav_model = nav_model.insert(|b| {
             b.text(fl!("trash"))
-                .icon(icon::icon(Trash::icon_symbolic(16)))
+                .icon(icon::icon(trash_icon_symbolic(self.trash_is_empty, 16)))
                 .data(Location::Trash)
                 .divider_above()
         });
@@ -1795,6 +1837,10 @@ impl App {
                     } else {
                         b = b.data(Location::Path(path));
                     }
+                    b = b.data(NavPathType {
+                        is_dir: true,
+                        is_file: false,
+                    });
                 } else if !uri.is_empty() {
                     b = b.data(Location::Network(uri, item.name(), None));
                 }
@@ -2435,11 +2481,18 @@ impl Application for App {
             auto_scroll_speed: None,
             file_dialog_opt: None,
             clipboard_cache: ClipboardCache::Empty,
+            has_recents: false,
+            trash_is_empty: false,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
         };
 
-        let mut commands = vec![app.update_config(), app.update(Message::CheckClipboard)];
+        let mut commands = vec![
+            app.update_config(),
+            app.update(Message::CheckClipboard),
+            app.check_recents(),
+            app.check_trash(),
+        ];
 
         for location in flags.locations {
             if let Some(path) = location.path_opt()
@@ -2520,17 +2573,21 @@ impl Application for App {
         ))
     }
 
+    // Called on every view: no filesystem access
     fn nav_context_menu(&self) -> Option<Vec<widget::menu::Tree<cosmic::Action<Self::Message>>>> {
         let items = self.nav_model.iter().map(|entity| {
             let favorite_index_opt = self.nav_model.data::<FavoriteIndex>(entity);
             let location_opt = self.nav_model.data::<Location>(entity);
+            let path_type = self
+                .nav_model
+                .data::<NavPathType>(entity)
+                .copied()
+                .unwrap_or_default();
+            let has_path = location_opt.and_then(Location::path_opt).is_some();
 
             let mut items: Vec<widget::menu::Item<NavMenuAction, String>> = Vec::with_capacity(7);
 
-            if location_opt
-                .and_then(Location::path_opt)
-                .is_some_and(|x| x.is_file())
-            {
+            if has_path && path_type.is_file {
                 items.push(cosmic::widget::menu::Item::Button(
                     fl!("open"),
                     None,
@@ -2553,8 +2610,8 @@ impl Application for App {
                     NavMenuAction::OpenInNewWindow(entity),
                 ));
             }
-            if let Some(path) = location_opt.and_then(Location::path_opt) {
-                let selected_dir = usize::from(path.is_dir());
+            if has_path {
+                let selected_dir = usize::from(path_type.is_dir);
                 let action_items: Vec<_> = self
                     .config
                     .context_actions
@@ -2597,7 +2654,7 @@ impl Application for App {
                 ));
             }
 
-            if matches!(location_opt, Some(Location::Recents)) && has_recents() {
+            if matches!(location_opt, Some(Location::Recents)) && self.has_recents {
                 items.push(cosmic::widget::menu::Item::Button(
                     fl!("clear-recents-history"),
                     None,
@@ -2605,7 +2662,7 @@ impl Application for App {
                 ));
             }
 
-            if matches!(location_opt, Some(Location::Trash)) && !Trash::is_empty() {
+            if matches!(location_opt, Some(Location::Trash)) && !self.trash_is_empty {
                 items.push(cosmic::widget::menu::Item::Button(
                     fl!("empty-trash"),
                     None,
@@ -2904,12 +2961,16 @@ impl Application for App {
             Message::Config(config) => {
                 if config != self.config {
                     log::info!("update config");
+                    let recents_shown = config.show_recents && !self.config.show_recents;
                     // Show details and military time are preserved for existing instances
                     let show_details = self.config.show_details;
                     let military_time = self.config.tab.military_time;
                     self.config = config;
                     self.config.show_details = show_details;
                     self.config.tab.military_time = military_time;
+                    if recents_shown {
+                        return Task::batch([self.update_config(), self.check_recents()]);
+                    }
                     return self.update_config();
                 }
             }
@@ -3325,6 +3386,9 @@ impl Application for App {
                 if let Some(dialog) = &mut self.file_dialog_opt {
                     return dialog.update(dialog_message);
                 }
+            }
+            Message::HasRecents(has_recents) => {
+                self.has_recents = has_recents;
             }
             Message::Key(window_id, modifiers, key, physical_key, text) => {
                 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
@@ -4212,21 +4276,14 @@ impl Application for App {
                 self.mime_app_cache.reload();
             }
             Message::RescanRecents => {
-                return self.rescan_recents();
+                return Task::batch([self.rescan_recents(), self.check_recents()]);
             }
             Message::RescanTrash => {
-                // Update trash icon if empty/full
-                let maybe_entity = self.nav_model.iter().find(|&entity| {
-                    self.nav_model
-                        .data::<Location>(entity)
-                        .is_some_and(|loc| matches!(loc, Location::Trash))
-                });
-                if let Some(entity) = maybe_entity {
-                    self.nav_model
-                        .icon_set(entity, icon::icon(Trash::icon_symbolic(16)));
-                }
-
-                return Task::batch([self.rescan_trash(), self.update_desktop()]);
+                return Task::batch([
+                    self.check_trash(),
+                    self.rescan_trash(),
+                    self.update_desktop(),
+                ]);
             }
             Message::Rename(entity_opt) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -4339,7 +4396,7 @@ impl Application for App {
             }
             Message::SetShowRecents(show_recents) => {
                 config_set!(show_recents, show_recents);
-                return self.update_config();
+                return Task::batch([self.update_config(), self.check_recents()]);
             }
             Message::SetTypeToSearch(type_to_search) => {
                 config_set!(type_to_search, type_to_search);
@@ -4447,6 +4504,21 @@ impl Application for App {
                 let mut config = self.config.tab;
                 config.show_hidden = !config.show_hidden;
                 return self.update(Message::TabConfig(config));
+            }
+            Message::TrashIsEmpty(is_empty) => {
+                if is_empty != self.trash_is_empty {
+                    self.trash_is_empty = is_empty;
+                    // Update trash icon if empty/full
+                    let maybe_entity = self.nav_model.iter().find(|&entity| {
+                        self.nav_model
+                            .data::<Location>(entity)
+                            .is_some_and(|loc| matches!(loc, Location::Trash))
+                    });
+                    if let Some(entity) = maybe_entity {
+                        self.nav_model
+                            .icon_set(entity, icon::icon(trash_icon_symbolic(is_empty, 16)));
+                    }
+                }
             }
             Message::TabMessage(entity_opt, tab_message) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());

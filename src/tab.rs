@@ -50,7 +50,7 @@ use crate::dialog::DialogKind;
 use crate::format_time::{FormatTime, date_time_formatter, format_time, time_formatter};
 use crate::item::{
     ChecksumState, DirSize, FileChecksums, Item, ItemMetadata, ItemThumbnail, SearchItem,
-    folder_name, item_from_path, item_from_search_item,
+    item_from_path, item_from_search_item,
 };
 use crate::large_image::{
     LargeImageManager, decode_large_image, should_use_dedicated_worker, should_use_tiling,
@@ -3200,16 +3200,19 @@ impl Tab {
 
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
-            Location::Desktop(path, ..)
-            | Location::Path(path)
-            | Location::Search(SearchLocation::Path(path), ..) => {
+            Location::Desktop(..)
+            | Location::Path(..)
+            | Location::Search(SearchLocation::Path(..), ..) => {
                 let excess_str = "...";
                 let excess_width = text_width_body(excess_str);
-                for (index, ancestor) in path.ancestors().enumerate() {
-                    let (name, found_home) = folder_name(ancestor);
+                let ancestors = self.location_ancestors.iter().enumerate();
+                for (index, (ancestor_location, name)) in ancestors {
+                    let Some(ancestor) = ancestor_location.path_opt() else {
+                        continue;
+                    };
                     let (name_width, name_text) = if children.is_empty() {
                         (
-                            text_width_heading(&name),
+                            text_width_heading(name),
                             widget::text::heading(name)
                                 .wrapping(text::Wrapping::None)
                                 .ellipsize(text::Ellipsize::End(
@@ -3225,7 +3228,7 @@ impl Tab {
                         );
                         w += 16.0;
                         (
-                            text_width_body(&name),
+                            text_width_body(name),
                             widget::text::body(name).wrapping(text::Wrapping::None),
                         )
                     };
@@ -3256,7 +3259,8 @@ impl Tab {
                             } else {
                                 theme::Button::Link
                             })
-                            .on_press(if ancestor == path {
+                            // The first ancestor is the location itself
+                            .on_press(if index == 0 {
                                 Message::EditLocation(Some(self.location.clone().into()))
                             } else {
                                 Message::Location(location.clone())
@@ -3281,7 +3285,7 @@ impl Tab {
                     }
                     children.push(self.dnd_dest(&location, context_menu));
 
-                    if found_home || overflow {
+                    if overflow {
                         break;
                     }
                 }
