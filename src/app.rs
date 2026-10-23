@@ -454,6 +454,7 @@ pub enum Message {
         Vec<tab::Item>,
         Option<Vec<PathBuf>>,
     ),
+    TabRescanFailed(Entity, Location),
     TabView(Option<Entity>, tab::View),
     TimeConfigChange(TimeConfig),
     ToggleContextPage(ContextPage),
@@ -670,6 +671,62 @@ pub struct FavoriteIndex(usize);
 
 pub struct MounterData(MounterKey, MounterItem);
 
+/// Scans of tab locations that have not returned yet. Changes keep coming while a folder is
+/// scanned (moving many files to the trash, a large copy): requests to scan the same location
+/// meanwhile are merged into a single scan, run once the current one returns, instead of all
+/// running at once.
+#[derive(Default)]
+struct TabScans(FxHashMap<Entity, TabScan>);
+
+struct TabScan {
+    location: Location,
+    /// Set when the location is asked to be scanned again meanwhile, with the paths to select
+    queued: Option<Option<Vec<PathBuf>>>,
+}
+
+impl TabScans {
+    /// Records a request to scan `location` in a tab. Returns the paths to select if the scan
+    /// must start now, or `None` if it is merged into the scan running for this location.
+    fn start(
+        &mut self,
+        entity: Entity,
+        location: &Location,
+        selection_paths: Option<Vec<PathBuf>>,
+    ) -> Option<Option<Vec<PathBuf>>> {
+        if let Some(scan) = self.0.get_mut(&entity)
+            && scan.location == *location
+        {
+            let queued = scan.queued.get_or_insert(None);
+            if selection_paths.is_some() {
+                *queued = selection_paths;
+            }
+            return None;
+        }
+        // A scan of another location is replaced: its result is ignored as the tab moved on
+        self.0.insert(
+            entity,
+            TabScan {
+                location: location.clone(),
+                queued: None,
+            },
+        );
+        Some(selection_paths)
+    }
+
+    /// Records that the scan of `location` in a tab returned. Returns the paths to select if
+    /// another scan was requested meanwhile and must start now.
+    fn finish(&mut self, entity: Entity, location: &Location) -> Option<Option<Vec<PathBuf>>> {
+        if self
+            .0
+            .get(&entity)
+            .is_none_or(|scan| scan.location != *location)
+        {
+            return None;
+        }
+        self.0.remove(&entity)?.queued
+    }
+}
+
 /// What the path of a sidebar entry points to. It is read once when the sidebar is built, because
 /// the sidebar context menus are rebuilt on every view and must not touch the filesystem.
 #[derive(Clone, Copy, Debug, Default)]
@@ -787,6 +844,7 @@ pub struct App {
     /// Whether the trash is empty. Read in the background when it changes, so the sidebar does
     /// not scan every mount point on every view.
     trash_is_empty: bool,
+    tab_scans: TabScans,
 }
 
 impl App {
@@ -1513,6 +1571,10 @@ impl App {
         location: Location,
         selection_paths: Option<Vec<PathBuf>>,
     ) -> Task<Message> {
+        let Some(selection_paths) = self.tab_scans.start(entity, &location, selection_paths) else {
+            return Task::none();
+        };
+
         log::info!("rescan_tab {entity:?} {location:?} {selection_paths:?}");
         let icon_sizes = self.config.tab.icon_sizes;
         let mounter_items = self.mounter_items.clone();
@@ -1546,10 +1608,18 @@ impl App {
                 }
                 Err(err) => {
                     log::warn!("failed to rescan: {err}");
-                    cosmic::action::none()
+                    cosmic::action::app(Message::TabRescanFailed(entity, location))
                 }
             }
         })
+    }
+
+    /// Marks the scan of `location` in the tab as done, and starts the scan requested meanwhile
+    fn finish_tab_scan(&mut self, entity: Entity, location: &Location) -> Task<Message> {
+        match self.tab_scans.finish(entity, location) {
+            Some(selection_paths) => self.rescan_tab(entity, location.clone(), selection_paths),
+            None => Task::none(),
+        }
     }
 
     fn rescan_trash(&mut self) -> Task<Message> {
@@ -2501,6 +2571,7 @@ impl Application for App {
             clipboard_cache: ClipboardCache::Empty,
             has_recents: false,
             trash_is_empty: false,
+            tab_scans: TabScans::default(),
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             layer_sizes: FxHashMap::default(),
         };
@@ -4694,6 +4765,7 @@ impl Application for App {
                 return self.open_tab(location, true, None);
             }
             Message::TabRescan(entity, mut location, parent_item_opt, items, selection_paths) => {
+                let next_scan = self.finish_tab_scan(entity, &location);
                 location = location.normalize();
                 if let Some(tab) = self.tab_model.data_mut::<Tab>(entity) {
                     tab.location = tab.location.normalize();
@@ -4711,7 +4783,8 @@ impl Application for App {
                         tab.sort_name = sort.0;
                         tab.sort_direction = sort.1;
 
-                        let mut tasks = Vec::with_capacity(2);
+                        let mut tasks = Vec::with_capacity(3);
+                        tasks.push(next_scan);
 
                         if let Some(selection_paths) = selection_paths {
                             tab.select_paths(selection_paths);
@@ -4736,6 +4809,10 @@ impl Application for App {
                         return Task::batch(tasks);
                     }
                 }
+                return next_scan;
+            }
+            Message::TabRescanFailed(entity, location) => {
+                return self.finish_tab_scan(entity, &location);
             }
             Message::TabView(entity_opt, view) => {
                 let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
@@ -7338,5 +7415,44 @@ pub(crate) mod test_utils {
             path.display(),
             tab_path.display()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cosmic::widget::segmented_button::Entity;
+    use slotmap::SlotMap;
+    use std::path::PathBuf;
+
+    use super::TabScans;
+    use crate::tab::Location;
+
+    #[test]
+    fn tab_scans_merge_requests_for_the_same_location() {
+        let mut entities = SlotMap::<Entity, ()>::with_key();
+        let (tab, other_tab) = (entities.insert(()), entities.insert(()));
+        let a = Location::Path(PathBuf::from("/a"));
+        let b = Location::Path(PathBuf::from("/b"));
+        let selection = Some(vec![PathBuf::from("/a/x")]);
+        let mut scans = TabScans::default();
+
+        // The first request starts a scan, the next ones wait for it
+        assert_eq!(scans.start(tab, &a, None), Some(None));
+        assert_eq!(scans.start(tab, &a, selection.clone()), None);
+        assert_eq!(scans.start(tab, &a, None), None);
+        // Other tabs are independent
+        assert_eq!(scans.start(other_tab, &a, None), Some(None));
+
+        // Then a single scan runs for them, which keeps the paths to select
+        assert_eq!(scans.finish(tab, &a), Some(selection.clone()));
+        assert_eq!(scans.start(tab, &a, selection.clone()), Some(selection));
+        assert_eq!(scans.finish(tab, &a), None);
+
+        // Scanning another location replaces the scan, whose result is then ignored
+        assert_eq!(scans.start(tab, &a, None), Some(None));
+        assert_eq!(scans.start(tab, &b, None), Some(None));
+        assert_eq!(scans.finish(tab, &a), None);
+        assert_eq!(scans.start(tab, &b, None), None);
+        assert_eq!(scans.finish(tab, &b), Some(None));
     }
 }

@@ -33,7 +33,7 @@ use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs::{self, File, Metadata};
@@ -1967,6 +1967,62 @@ impl ItemMetadata {
             _ => None,
         }
     }
+
+    /// Whether `self` and `other` describe a file in the same state as far as data loaded in the
+    /// background is concerned: same type, size and modification time, like thumbnail caches.
+    /// A folder's modification time changes when entries are added, removed or renamed.
+    fn same_state(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Path { metadata, .. },
+                Self::Path {
+                    metadata: other, ..
+                },
+            ) => {
+                metadata.file_type() == other.file_type()
+                    && metadata.len() == other.len()
+                    && metadata.modified().ok() == other.modified().ok()
+            }
+            #[cfg(feature = "gvfs")]
+            (
+                Self::GvfsPath {
+                    mtime,
+                    size_opt,
+                    is_dir,
+                    ..
+                },
+                Self::GvfsPath {
+                    mtime: other_mtime,
+                    size_opt: other_size_opt,
+                    is_dir: other_is_dir,
+                    ..
+                },
+            ) => mtime == other_mtime && size_opt == other_size_opt && is_dir == other_is_dir,
+            _ => false,
+        }
+    }
+
+    /// Takes the children count of `old` if this one was not counted
+    fn keep_children_count(&mut self, old: &Self) {
+        match (self, old) {
+            (
+                Self::Path { children_opt, .. },
+                Self::Path {
+                    children_opt: old_children_opt,
+                    ..
+                },
+            ) if children_opt.is_none() => *children_opt = *old_children_opt,
+            #[cfg(feature = "gvfs")]
+            (
+                Self::GvfsPath { children_opt, .. },
+                Self::GvfsPath {
+                    children_opt: old_children_opt,
+                    ..
+                },
+            ) if children_opt.is_none() => *children_opt = *old_children_opt,
+            _ => {}
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -2387,6 +2443,26 @@ impl Item {
     fn display_name(name: &str) -> String {
         // In order to wrap at periods and underscores, add a zero width space after each one
         name.replace('.', ".\u{200B}").replace('_', "_\u{200B}")
+    }
+
+    /// Keeps what was loaded in the background for `old`, the same path in the previous listing,
+    /// unless the file changed since. Otherwise every change in a folder, like moving one file
+    /// to the trash, would load all its thumbnails again, and count its gvfs folders again.
+    fn keep_loaded_from(&mut self, mut old: Self) {
+        if !self.metadata.same_state(&old.metadata) {
+            return;
+        }
+        if let Some(thumbnail) = old.thumbnail_opt.take() {
+            // Image thumbnails also replaced the icons. Other icons are taken from the new
+            // listing, which may have been scanned for other icon sizes.
+            if matches!(thumbnail, ItemThumbnail::Image(..) | ItemThumbnail::Svg(..)) {
+                self.icon_handle_grid = old.icon_handle_grid;
+                self.icon_handle_list = old.icon_handle_list;
+                self.icon_handle_list_condensed = old.icon_handle_list_condensed;
+            }
+            self.thumbnail_opt = Some(thumbnail);
+        }
+        self.metadata.keep_children_count(&old.metadata);
     }
 
     /// Text widget for a filename in grid/icon view: word-or-glyph wrapping, middle-ellipsized to 3 lines.
@@ -2876,7 +2952,15 @@ pub struct Tab {
     time_formatter: DateTimeFormatter<fieldsets::T>,
     window_id: Option<window::Id>,
     large_image_manager: LargeImageManager,
+    /// Listings of the last locations left, most recent first. Going back to one of them shows
+    /// it at once while it is scanned again, and keeps its thumbnails.
+    items_cache: VecDeque<(Location, Vec<Item>)>,
 }
+
+/// Most listings kept in [`Tab::items_cache`]
+const ITEMS_CACHE_LOCATIONS: usize = 3;
+/// Most items kept in [`Tab::items_cache`], for all listings
+const ITEMS_CACHE_ITEMS: usize = 10_000;
 
 async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, OperationError> {
     let mut total = 0;
@@ -3020,6 +3104,7 @@ impl Tab {
             time_formatter: time_formatter(config.military_time),
             window_id,
             large_image_manager: LargeImageManager::new(),
+            items_cache: VecDeque::new(),
         }
     }
 
@@ -3093,19 +3178,64 @@ impl Tab {
         false
     }
 
-    pub fn set_items(&mut self, mut items: Vec<Item>) {
-        let highlighted = self
-            .items_opt
-            .as_ref()
-            .and_then(|items| items.iter().enumerate().find(|i| i.1.highlighted))
-            .map(|(i, _)| i);
-        let selected: FxHashSet<Location> = self.selected_locations().into_iter().collect();
+    /// Takes the cached listing of the current location, if any, without its selection
+    fn take_cached_items(&mut self) -> Option<Vec<Item>> {
+        let index = self
+            .items_cache
+            .iter()
+            .position(|(location, _)| *location == self.location)?;
+        let (_, mut items) = self.items_cache.remove(index)?;
         for item in &mut items {
             item.selected = false;
-            if let Some(location) = &item.location_opt
-                && selected.contains(location)
-            {
-                item.selected = true;
+            item.highlighted = false;
+            item.overlaps_drag_rect = false;
+            // Positions are those of the last time the listing was shown, scrolled elsewhere:
+            // like a new listing, they are only known once it is laid out again
+            item.pos_opt.set(None);
+            item.rect_opt.set(None);
+        }
+        Some(items)
+    }
+
+    /// Keeps the listing of a location that is left, within the cache limits
+    fn cache_items(&mut self, location: Location, items: Vec<Item>) {
+        self.items_cache.retain(|(cached, _)| *cached != location);
+        if items.len() > ITEMS_CACHE_ITEMS {
+            return;
+        }
+        self.items_cache.push_front((location, items));
+        let mut total = 0;
+        let keep = self
+            .items_cache
+            .iter()
+            .take(ITEMS_CACHE_LOCATIONS)
+            .take_while(|(_, items)| {
+                total += items.len();
+                total <= ITEMS_CACHE_ITEMS
+            })
+            .count();
+        self.items_cache.truncate(keep);
+    }
+
+    pub fn set_items(&mut self, mut items: Vec<Item>) {
+        let old_items = self.items_opt.take().unwrap_or_default();
+        let highlighted = old_items.iter().position(|item| item.highlighted);
+        let selected: FxHashSet<Location> = old_items
+            .iter()
+            .filter(|item| item.selected)
+            .filter_map(|item| item.location_opt.clone())
+            .collect();
+        let mut old_by_path: FxHashMap<PathBuf, Item> = old_items
+            .into_iter()
+            .filter_map(|item| Some((item.path_opt()?.clone(), item)))
+            .collect();
+        for item in &mut items {
+            item.selected = item
+                .location_opt
+                .as_ref()
+                .is_some_and(|location| selected.contains(location));
+            if let Some(old) = item.path_opt().and_then(|path| old_by_path.remove(path)) {
+                item.keep_loaded_from(old);
             }
         }
         self.items_opt = Some(items);
@@ -3585,11 +3715,22 @@ impl Tab {
     }
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
-        self.location = location.normalize();
+        let previous_location = std::mem::replace(&mut self.location, location.normalize());
         self.location_ancestors = self.location.ancestors();
         self.location_title = self.location.title();
         self.edit_location = None;
-        self.items_opt = None;
+        // Until the location is scanned, show its cached listing if it was visited recently
+        let previous_items = self.items_opt.take();
+        if previous_location == self.location {
+            self.items_opt = previous_items;
+        } else {
+            self.items_opt = self.take_cached_items();
+            if let Some(items) = previous_items
+                && !matches!(previous_location, Location::Search(..))
+            {
+                self.cache_items(previous_location, items);
+            }
+        }
         //TODO: remember scroll by location?
         self.scroll_opt = None;
         self.select_focus = None;
@@ -5028,6 +5169,12 @@ impl Tab {
                                 self.location.path_opt().map(|path| vec![path.clone()]);
                         }
                         self.change_location(&location, history_i_opt);
+                        // A cached listing is shown at once: select what the scan will select
+                        if self.items_opt.is_some()
+                            && let Some(paths) = &selected_paths
+                        {
+                            self.select_paths(paths.clone());
+                        }
                         commands.push(Command::ChangeLocation(
                             self.title(),
                             location,
@@ -8133,6 +8280,128 @@ mod tests {
             .as_ref()
             .and_then(|items| items.iter().find(|item| item.name == name))
             .expect("tab should have the item")
+    }
+
+    // Identifies an icon handle, which has no equality
+    fn handle_id(handle: &widget::icon::Handle) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        handle.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    #[test]
+    fn rescan_keeps_what_was_loaded_for_unchanged_files() -> io::Result<()> {
+        let fs = empty_fs()?;
+        let path = fs.path();
+        fs::write(path.join("same.txt"), "same")?;
+        fs::write(path.join("photo.png"), "not decoded by this test")?;
+        fs::write(path.join("changed.txt"), "before")?;
+        fs::create_dir(path.join("folder"))?;
+        fs::write(path.join("folder").join("child"), "")?;
+
+        let mut tab = new_tab(path);
+        rescan(&mut tab);
+        let mime_icon = handle_id(&item(&tab, "same.txt").icon_handle_grid);
+        // As if thumbnails were loaded in the background
+        let thumbnail = widget::image::Handle::from_path(path.join("photo.png"));
+        let thumbnail_icon = widget::icon::Handle {
+            symbolic: false,
+            data: widget::icon::Data::Image(thumbnail.clone()),
+        };
+        for item in tab.items_opt.as_mut().expect("tab should have items") {
+            item.thumbnail_opt = Some(if item.name == "photo.png" {
+                ItemThumbnail::Image(thumbnail.clone(), None)
+            } else {
+                ItemThumbnail::NotImage
+            });
+            // For the others, this stands for an icon of another size, as before zooming
+            item.icon_handle_grid = thumbnail_icon.clone();
+        }
+
+        fs::write(path.join("changed.txt"), "after, with more bytes")?;
+        rescan(&mut tab);
+        assert!(item(&tab, "same.txt").thumbnail_opt.is_some());
+        // Icons come from the new listing, unless a thumbnail replaced them
+        assert_eq!(
+            handle_id(&item(&tab, "same.txt").icon_handle_grid),
+            mime_icon
+        );
+        assert!(matches!(
+            item(&tab, "photo.png").thumbnail_opt,
+            Some(ItemThumbnail::Image(..))
+        ));
+        assert_eq!(
+            handle_id(&item(&tab, "photo.png").icon_handle_grid),
+            handle_id(&thumbnail_icon)
+        );
+        assert!(item(&tab, "folder").thumbnail_opt.is_some());
+        assert!(item(&tab, "changed.txt").thumbnail_opt.is_none());
+
+        // A listing that does not count folders, like gvfs ones that are counted once visible,
+        // keeps the counts of the folders that did not change
+        let uncounted = |tab: &Tab| {
+            let (_, mut items) = tab.location.scan(IconSizes::default());
+            for item in &mut items {
+                if let ItemMetadata::Path { children_opt, .. } = &mut item.metadata {
+                    *children_opt = None;
+                }
+            }
+            items
+        };
+        assert_eq!(item(&tab, "folder").metadata.children_count(), Some(&1));
+        tab.set_items(uncounted(&tab));
+        assert_eq!(item(&tab, "folder").metadata.children_count(), Some(&1));
+        fs::write(path.join("folder").join("new child"), "")?;
+        tab.set_items(uncounted(&tab));
+        assert_eq!(item(&tab, "folder").metadata.children_count(), None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn going_back_shows_the_cached_listing() -> io::Result<()> {
+        let fs = simple_fs(NUM_FILES, NUM_HIDDEN, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
+        let path = fs.path();
+        let child = filter_dirs(path)?.next().expect("there should be a folder");
+
+        let mut tab = new_tab(path);
+        rescan(&mut tab);
+        let parent_names: Vec<_> = tab
+            .items_opt
+            .iter()
+            .flatten()
+            .map(|item| item.name.clone())
+            .collect();
+
+        // Nothing is cached for a new location: nothing shows until it is scanned
+        tab.update(
+            Message::Location(Location::Path(child.clone())),
+            Modifiers::empty(),
+        );
+        assert!(tab.items_opt.is_none());
+        rescan(&mut tab);
+
+        // Going back shows the parent at once, with the folder we came from selected
+        tab.update(Message::GoPrevious, Modifiers::empty());
+        let items = tab
+            .items_opt
+            .as_ref()
+            .expect("parent listing should be cached");
+        let names: Vec<_> = items.iter().map(|item| item.name.clone()).collect();
+        assert_eq!(names, parent_names);
+        let selected: Vec<_> = items
+            .iter()
+            .filter(|item| item.selected)
+            .filter_map(|item| item.path_opt())
+            .collect();
+        assert_eq!(selected, [&child]);
+
+        // And going forward shows the child at once
+        tab.update(Message::GoNext, Modifiers::empty());
+        assert!(tab.items_opt.is_some());
+
+        Ok(())
     }
 
     #[test]
