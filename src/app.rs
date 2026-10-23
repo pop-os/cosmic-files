@@ -1476,10 +1476,12 @@ impl App {
         let Some(items) = tab.items_opt() else {
             return Task::none();
         };
+        let operation_paths: FxHashSet<&PathBuf> =
+            op_sel.selected.iter().chain(&op_sel.ignored).collect();
         for item in items {
             if item.selected {
                 if let Some(path) = item.path_opt()
-                    && (op_sel.selected.contains(path) || op_sel.ignored.contains(path))
+                    && operation_paths.contains(path)
                 {
                     // Ignore if path in selected or ignored paths
                     continue;
@@ -3716,57 +3718,9 @@ impl Application for App {
                 let entities: Box<[_]> = self.tab_model.iter().collect();
                 for entity in entities {
                     if let Some(tab) = self.tab_model.data_mut::<Tab>(entity)
-                        && let Some(path) = tab.location.path_opt()
+                        && tab.apply_notify_events(&events)
                     {
-                        let mut contains_change = false;
-                        for event in &events {
-                            for event_path in &event.paths {
-                                if event_path.starts_with(path) {
-                                    if let notify::EventKind::Modify(
-                                        notify::event::ModifyKind::Metadata(_)
-                                        | notify::event::ModifyKind::Data(_),
-                                    ) = event.kind
-                                    {
-                                        // If metadata or data changed, find the matching item and reload it
-                                        //TODO: this could be further optimized by looking at what exactly changed
-                                        if let Some(items) = &mut tab.items_opt {
-                                            for item in items.iter_mut() {
-                                                if item.path_opt() == Some(event_path) {
-                                                    //TODO: reload more, like mime types?
-                                                    match fs::metadata(event_path) {
-                                                        Ok(new_metadata) => {
-                                                            if let ItemMetadata::Path {
-                                                                metadata,
-                                                                ..
-                                                            } = &mut item.metadata
-                                                            {
-                                                                *metadata = new_metadata;
-                                                            }
-                                                        }
-
-                                                        Err(err) => {
-                                                            log::warn!(
-                                                                "failed to reload metadata for {}: {}",
-                                                                path.display(),
-                                                                err
-                                                            );
-                                                        }
-                                                    }
-                                                    //TODO item.thumbnail_opt =
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        // Any other events reload the whole tab
-                                        contains_change = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if contains_change {
-                            needs_reload.push((entity, tab.location.clone()));
-                        }
+                        needs_reload.push((entity, tab.location.clone()));
                     }
                 }
 

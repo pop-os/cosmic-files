@@ -26,7 +26,8 @@ use icu::locale::preferences::extensions::unicode::keywords::HourCycle;
 use image::{DynamicImage, ImageReader};
 use jiff_icu::ConvertFrom;
 use mime_guess::{Mime, mime};
-use rustc_hash::FxHashMap;
+use notify_debouncer_full::{DebouncedEvent, notify};
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
@@ -3035,13 +3036,70 @@ impl Tab {
         self.items_opt.as_mut()
     }
 
+    /// Applies file watcher events to this tab. Content and metadata changes are applied to the
+    /// items in place; any other change in the location needs a rescan, and returns true.
+    pub(crate) fn apply_notify_events(&mut self, events: &[DebouncedEvent]) -> bool {
+        let Some(path) = self.location.path_opt() else {
+            return false;
+        };
+        let mut modified_paths = FxHashSet::default();
+        for event in events {
+            for event_path in &event.paths {
+                if event_path.starts_with(path) {
+                    if let notify::EventKind::Modify(
+                        notify::event::ModifyKind::Metadata(_) | notify::event::ModifyKind::Data(_),
+                    ) = event.kind
+                    {
+                        modified_paths.insert(event_path);
+                    } else {
+                        // Any other events reload the whole tab, metadata included
+                        return true;
+                    }
+                }
+            }
+        }
+        if modified_paths.is_empty() {
+            return false;
+        }
+
+        // If metadata or data changed, reload the metadata of the matching items
+        //TODO: this could be further optimized by looking at what exactly changed
+        if let Some(items) = &mut self.items_opt {
+            for item in items.iter_mut() {
+                let Some(item_path) = item.path_opt() else {
+                    continue;
+                };
+                if !modified_paths.contains(item_path) {
+                    continue;
+                }
+                //TODO: reload more, like mime types?
+                match fs::metadata(item_path) {
+                    Ok(new_metadata) => {
+                        if let ItemMetadata::Path { metadata, .. } = &mut item.metadata {
+                            *metadata = new_metadata;
+                        }
+                    }
+                    Err(err) => {
+                        log::warn!(
+                            "failed to reload metadata for {}: {}",
+                            item_path.display(),
+                            err
+                        );
+                    }
+                }
+                //TODO item.thumbnail_opt =
+            }
+        }
+        false
+    }
+
     pub fn set_items(&mut self, mut items: Vec<Item>) {
         let highlighted = self
             .items_opt
             .as_ref()
             .and_then(|items| items.iter().enumerate().find(|i| i.1.highlighted))
             .map(|(i, _)| i);
-        let selected = self.selected_locations();
+        let selected: FxHashSet<Location> = self.selected_locations().into_iter().collect();
         for item in &mut items {
             item.selected = false;
             if let Some(location) = &item.location_opt
@@ -3068,14 +3126,14 @@ impl Tab {
     }
 
     pub fn refresh_cut(&mut self, locations: &[PathBuf]) {
+        let locations: FxHashSet<&PathBuf> = locations.iter().collect();
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
-                item.cut = false;
-                if let Some(location_path) = item.location_opt.as_ref().and_then(Location::path_opt)
-                    && locations.contains(location_path)
-                {
-                    item.cut = true;
-                }
+                item.cut = item
+                    .location_opt
+                    .as_ref()
+                    .and_then(Location::path_opt)
+                    .is_some_and(|path| locations.contains(path));
             }
         }
     }
@@ -3247,6 +3305,7 @@ impl Tab {
 
     pub fn select_paths(&mut self, paths: Vec<PathBuf>) {
         self.select_focus = None;
+        let paths: FxHashSet<PathBuf> = paths.into_iter().collect();
         if let Some(ref mut items) = self.items_opt {
             for (i, item) in items.iter_mut().enumerate() {
                 item.selected = false;
@@ -8050,6 +8109,62 @@ mod tests {
                 thumb
             ),
         }
+        Ok(())
+    }
+
+    fn new_tab(path: &std::path::Path) -> Tab {
+        Tab::new(
+            Location::Path(path.into()),
+            TabConfig::default(),
+            ThumbCfg::default(),
+            None,
+            widget::Id::unique(),
+            None,
+        )
+    }
+
+    fn rescan(tab: &mut Tab) {
+        let (_, items) = tab.location.scan(IconSizes::default());
+        tab.set_items(items);
+    }
+
+    fn item<'a>(tab: &'a Tab, name: &str) -> &'a super::Item {
+        tab.items_opt
+            .as_ref()
+            .and_then(|items| items.iter().find(|item| item.name == name))
+            .expect("tab should have the item")
+    }
+
+    #[test]
+    fn notify_events_reload_metadata_or_ask_for_rescan() -> io::Result<()> {
+        use notify_debouncer_full::DebouncedEvent;
+        use notify_debouncer_full::notify::event::{CreateKind, DataChange, ModifyKind};
+        use notify_debouncer_full::notify::{Event, EventKind};
+
+        let fs = empty_fs()?;
+        let path = fs.path();
+        let file = path.join("file");
+        fs::write(&file, "before")?;
+        let mut tab = new_tab(path);
+        rescan(&mut tab);
+
+        fs::write(&file, "after, with more bytes")?;
+        let modify = DebouncedEvent::new(
+            Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Any))).add_path(file.clone()),
+            std::time::Instant::now(),
+        );
+        assert!(!tab.apply_notify_events(&[modify]));
+        assert_eq!(
+            item(&tab, "file").metadata.file_size(),
+            Some("after, with more bytes".len() as u64)
+        );
+
+        let create = DebouncedEvent::new(
+            Event::new(EventKind::Create(CreateKind::File)).add_path(path.join("new")),
+            std::time::Instant::now(),
+        );
+        assert!(tab.apply_notify_events(&[create]));
+
         Ok(())
     }
 
