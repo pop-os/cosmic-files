@@ -4,7 +4,7 @@ version = "1.11.0"
 authors = ["Jeremy Soller <jeremy@system76.com>"]
 edition = "2024"
 license = "GPL-3.0-only"
-rust-version = "1.93"
+rust-version = "1.95"
 
 [dependencies]
 anyhow = "1"
@@ -56,7 +56,7 @@ recently-used-xbel = "1.2.0"
 md-5 = "0.10.6"
 sha2 = "0.10"
 png = "0.18"
-jxl-oxide = { version = "0.12.5", features = ["image"] }
+jxl-image-rs-integration = "0.8"
 num_cpus = "1.17.0"
 filetime = "0.2"
 tracing = "0.1.44"
@@ -99,7 +99,7 @@ features = [
     "lzma",
     "ppmd",
     "xz",
-    "zstd"
+    "zstd",
 ]
 
 [[example]]
