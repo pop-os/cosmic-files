@@ -17,7 +17,7 @@ use cosmic::iced::widget::button::focus;
 use cosmic::iced::widget::scrollable;
 use cosmic::iced::widget::scrollable::AbsoluteOffset;
 use cosmic::iced::window::{self, Event as WindowEvent, Id as WindowId};
-use cosmic::iced::{self, Alignment, Event, Length, Size, Subscription, event, mouse, stream};
+use cosmic::iced::{self, Alignment, Color, Event, Length, Size, Subscription, event, mouse, stream};
 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
 use cosmic::iced::{
     Limits, Point, Rectangle,
@@ -6618,36 +6618,6 @@ impl Application for App {
 
     fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
         let mut elements = Vec::<Element<'_, Self::Message>>::new();
-        
-        // Search icon / input
-        if let Some(term) = self.search_get() {
-            if self.core.is_condensed() {
-                elements.push(
-                    //TODO: selected state is not appearing different
-                    widget::button::icon(icon::from_name("system-search-symbolic"))
-                        .on_press(Message::SearchClear)
-                        .padding(8)
-                        .selected(true)
-                        .into(),
-                );
-            } else {
-                elements.push(
-                    widget::text_input::search_input("", term)
-                        .width(Length::Fixed(240.0))
-                        .id(self.search_id.clone())
-                        .on_clear(Message::SearchClear)
-                        .on_input(Message::SearchInput)
-                        .into(),
-                );
-            }
-        } else {
-            elements.push(
-                widget::button::icon(icon::from_name("system-search-symbolic"))
-                    .on_press(Message::SearchActivate)
-                    .padding(8)
-                    .into(),
-            );
-        }
 
         // Progress Icon for long-runing operations
         if !self.progress_operations.is_empty()
@@ -6698,11 +6668,24 @@ impl Application for App {
                     running = self.state.operations_in_progress
                 )
             }
+            let theme = self.config.app_theme.theme();
+            let cosmic = theme.cosmic();
+            let mut bar_color = Color::from(cosmic.accent_color());
+            if total_progress < 0.5 {
+                bar_color = bar_color.scale_alpha(0.5)
+            }
+            else {
+                bar_color = bar_color.scale_alpha(total_progress)
+            };
             elements.push(
                 widget::button::custom(
                     widget::container(
                         widget::tooltip(
-                            widget::indeterminate_circular().size(20.0),
+                            widget::indeterminate_circular()
+                                .progress(total_progress)
+                                .bar_color(bar_color)
+                                .track_color(Color::TRANSPARENT)
+                                .size(20.0),
                             widget::text::body(title),
                             widget::tooltip::Position::Bottom,
                         )
@@ -6714,6 +6697,43 @@ impl Application for App {
                 .into()
             );
         }
+
+        // Search icon / input
+        if let Some(term) = self.search_get() {
+            if self.core.is_condensed() {
+                elements.push(
+                    //TODO: selected state is not appearing different
+                    widget::button::icon(icon::from_name("system-search-symbolic"))
+                        .on_press(Message::SearchClear)
+                        .padding(8)
+                        .selected(true)
+                        .into(),
+                );
+            } else {
+                elements.push(
+                    widget::text_input::search_input("", term)
+                        .width(Length::Fixed(240.0))
+                        .id(self.search_id.clone())
+                        .on_clear(Message::SearchClear)
+                        .on_input(Message::SearchInput)
+                        .into(),
+                );
+            }
+        } else {
+            elements.push(
+                widget::button::icon(icon::from_name("system-search-symbolic"))
+                    .on_press(Message::SearchActivate)
+                    .padding(8)
+                    .into(),
+            );
+        }
+
+        elements.push(
+            widget::button::icon(icon::from_name("list-add-symbolic"))
+                .on_press(Message::TabNew)
+                .padding(8)
+                .into(),
+        );
 
         elements
     }
