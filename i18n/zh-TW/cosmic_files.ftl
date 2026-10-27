@@ -111,7 +111,7 @@ username = 使用者名稱
 ## Operations
 
 edit-history = 編輯歷史
-history = 歷史紀錄
+history = 歷史紀錄…
 no-history = 無歷史記錄項目。
 pending = 待處理
 failed = 失敗
@@ -182,7 +182,7 @@ default-app = { $name } （預設）
 
 ## Show details
 
-show-details = 顯示詳細資訊
+show-details = 顯示詳細資訊…
 
 ## Settings
 
@@ -281,7 +281,7 @@ removed-from-recents =
         [one] 項目
        *[other] 項目
     }
-repository = 軟體庫
+repository = 原始碼儲存庫
 desktop-view-options = 桌面檢視選項...
 show-on-desktop = 顯示在桌面
 desktop-folder-content = 桌面資料夾內容

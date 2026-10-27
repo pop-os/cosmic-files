@@ -8,7 +8,7 @@ support = Soporte
 settings = Axustes
 appearance = Apariencia
 theme = Tema
-match-desktop = Axustar ao escritorio
+match-desktop = Emparexar co escritorio
 dark = Escuro
 light = Claro
 replace = Remplazar
@@ -331,3 +331,6 @@ deleting =
         [one] elemento
        *[other] elementos
     } da  { trash } ({ $progress })...
+sidebar-label = Etiqueta da barra lateral
+search-application = Buscar por nome de aplicación
+change-sidebar-label = Cambiar etiqueta da barra lateral

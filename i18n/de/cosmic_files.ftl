@@ -206,7 +206,7 @@ username = Benutzername
 
 cancelled = Abgebrochen
 edit-history = Verlauf bearbeiten
-history = Verlauf
+history = Verlauf ...
 no-history = Keine Einträge im Verlauf.
 pending = Ausstehend
 progress = { $percent } %
@@ -304,7 +304,7 @@ default-app = { $name } (Standard)
 
 ## Details anzeigen
 
-show-details = Details anzeigen
+show-details = Details anzeigen ...
 type = Typ: { $mime }
 items = Elemente: { $items }
 item-size = Größe: { $size }
@@ -441,5 +441,6 @@ rename-confirm = Umbenennen
 checksum = { $kind } Prüfsumme
 calculate = Berechnen
 error = Fehler
-sidebar-label = Bezeichnung in der Seitenleiste
+sidebar-label = Bezeichnung der Seitenleiste
 search-application = Nach App-Name suchen
+change-sidebar-label = Bezeichnung der Seitenleiste ändern

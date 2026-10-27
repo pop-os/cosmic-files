@@ -214,7 +214,7 @@ username = 用户名
 
 cancelled = 已取消
 edit-history = 编辑历史记录
-history = 历史记录
+history = 历史记录…
 no-history = 历史记录为空。
 pending = 待处理
 progress = { $percent }%
@@ -322,7 +322,7 @@ default-app = { $name }（默认）
 
 ## Show details
 
-show-details = 显示详情
+show-details = 显示详情…
 type = 文件类型：{ $mime }
 items = 文件数：{ $items }
 item-size = 文件大小：{ $size }

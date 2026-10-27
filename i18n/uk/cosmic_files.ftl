@@ -70,7 +70,7 @@ skip = Пропустити
 ## Operations
 
 edit-history = Історія дій
-history = Історія
+history = Історія...
 no-history = Історія порожня.
 pending = Очікується
 failed = Не виконано
@@ -133,7 +133,7 @@ settings = Налаштування
 
 appearance = Вигляд
 theme = Тема
-match-desktop = Системна
+match-desktop = Підігнати під стільницю
 dark = Темна
 light = Світла
 # Context menu
@@ -311,7 +311,7 @@ set-executable-and-launched = «{ $name }» надано права на вик�
 selected-items = Вибрані { $items } елементи
 setting-permissions = Надання прав { $mode } для «{ $name }»
 set-permissions = Надано права { $mode } для «{ $name }»
-show-details = Показати подробиці
+show-details = Показати подробиці...
 type = Тип: { $mime }
 items = Елементів: { $items }
 item-size = Розмір: { $size }

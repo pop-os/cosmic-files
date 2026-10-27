@@ -142,7 +142,7 @@ username = Käyttäjätunnus
 ## Operations
 
 edit-history = Muokkaa historiaa
-history = Historia
+history = Historia…
 no-history = Historia on tyhjä.
 pending = Jonossa
 failed = Epäonnistuneet
@@ -215,7 +215,7 @@ default-app = { $name } (oletus)
 
 ## Show details
 
-show-details = Näytä yksityiskohdat
+show-details = Näytä yksityiskohdat…
 
 ## Settings
 

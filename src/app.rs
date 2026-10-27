@@ -1452,14 +1452,11 @@ impl App {
     }
 
     fn remove_window(&mut self, id: &window::Id) {
-        if let Some(window) = self.windows.remove(id) {
-            match window.kind {
-                WindowKind::Desktop(entity) => {
-                    // Remove the tab from the tab model
-                    self.tab_model.remove(entity);
-                }
-                _ => {}
-            }
+        if let Some(window) = self.windows.remove(id)
+            && let WindowKind::Desktop(entity) = window.kind
+        {
+            // Remove the tab from the tab model
+            self.tab_model.remove(entity);
         }
     }
 
@@ -7058,6 +7055,10 @@ impl Application for App {
                 .map(|(entity, tab_msg)| Message::TabMessage(Some(entity), tab_msg)),
             )
         }));
+
+        if let Some(dialog) = &self.file_dialog_opt {
+            subscriptions.push(dialog.subscription());
+        };
 
         Subscription::batch(subscriptions)
     }

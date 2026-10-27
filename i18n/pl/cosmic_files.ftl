@@ -210,7 +210,7 @@ username = Nazwa użytkownika
 
 cancelled = Anulowano
 edit-history = Historia edycji
-history = Historia
+history = Historia…
 no-history = Brak pozycji w historii.
 pending = Oczekujące
 progress = { $percent }%
@@ -328,7 +328,7 @@ default-app = { $name } (domyślnie)
 
 ## Show details
 
-show-details = Pokaż szczegóły
+show-details = Pokaż szczegóły…
 type = Typ: { $mime }
 items = Elementy: { $items }
 item-size = Rozmiar: { $size }
