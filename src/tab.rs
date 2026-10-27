@@ -5637,6 +5637,34 @@ impl Tab {
         column.into()
     }
 
+    pub fn loading_view(
+        &self,
+    ) -> (
+        Option<Element<'static, Message>>,
+        Element<'_, Message>,
+        bool,
+    ) {
+        let cosmic_theme::Spacing { space_xxs, .. } = theme::spacing();
+        let mouse_area = mouse_area::MouseArea::new(
+            widget::container(
+                widget::column::with_children([
+                    Element::from(widget::indeterminate_circular().size(64.0)),
+                    Element::from(widget::text::body(fl!("loading-items"))),
+                ])
+                .align_x(Alignment::Center)
+                .spacing(space_xxs),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+        )
+        .on_press(|_| Message::Click(None))
+        .on_drag_end(|_| Message::DragEnd)
+        .show_drag_rect(self.mode.multiple())
+        .on_release(|_| Message::ClickRelease(None));
+
+        (None, mouse_area.into(), false)
+    }
+
     pub fn empty_view(&self, has_hidden: bool) -> Element<'_, Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::spacing();
 
@@ -5929,6 +5957,11 @@ impl Tab {
                     ));
                 }
             }
+        }
+
+        // Don't show the loading indicator for the Desktop
+        else if !matches!(self.mode, Mode::Desktop) {
+            return self.loading_view()
         }
 
         let drag_list = (!dnd_items.is_empty()).then(|| {
@@ -6381,7 +6414,10 @@ impl Tab {
 
             // Cache content height for scroll clamping on next frame
             self.content_height_opt.set(Some(y));
+        } else {
+            return self.loading_view()
         }
+
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
             let top_deduct = (if condensed || is_search { 6 } else { 9 }) * space_xxs;
