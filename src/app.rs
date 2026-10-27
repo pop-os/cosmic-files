@@ -6671,6 +6671,7 @@ impl Application for App {
             let theme = self.config.app_theme.theme();
             let cosmic = theme.cosmic();
             let mut bar_color = Color::from(cosmic.accent_color());
+            let track_color = Color::from(cosmic.bg_component_color()).scale_alpha(0.4);
             if total_progress < 0.5 {
                 bar_color = bar_color.scale_alpha(0.5)
             }
@@ -6684,7 +6685,7 @@ impl Application for App {
                             widget::indeterminate_circular()
                                 .progress(total_progress)
                                 .bar_color(bar_color)
-                                .track_color(Color::TRANSPARENT)
+                                .track_color(track_color)
                                 .size(20.0),
                             widget::text::body(title),
                             widget::tooltip::Position::Bottom,
