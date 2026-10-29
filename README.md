@@ -1,3 +1,16 @@
+# TH3AL3X · COSMIC Files Custom
+
+Personal modifications for Pop!_OS 24.04 / COSMIC, based on upstream commit `3cc4b80` (COSMIC Files 1.11.0).
+
+- **Transparent desktop labels:** removes the background behind unselected desktop icon names. Selection and hover highlights remain.
+- **Bottom-right Show Desktop button:** a small 10 × 36 logical-pixel strip on each monitor. Left-click minimizes visible windows on active workspaces; click again restores the captured windows. Already minimized windows are left alone. Uses COSMIC Wayland protocols, with no pointer polling or animations.
+
+Installation, rollback, limitations and credits: **[local-mods/README.md](local-mods/README.md)**.
+
+This is an independent customization, not an official System76 release. Distribution updates refresh the preserved original applet; rebuild the custom applet to receive upstream fixes.
+
+---
+
 # cosmic-files
 File manager for the COSMIC desktop environment
 

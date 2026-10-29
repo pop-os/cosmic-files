@@ -1,0 +1,9 @@
+[package]
+name = "cosmic-show-desktop-control"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+[workspace]
+[dependencies]
+cctk = { package = "cosmic-client-toolkit", git = "https://github.com/pop-os/cosmic-protocols", rev = "c0cff4d" }
+thiserror = "2"

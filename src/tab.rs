@@ -190,7 +190,8 @@ fn button_appearance(
             appearance.background = Some(Color::from(cosmic.bg_component_color()).into());
         }
     } else if desktop {
-        appearance.background = Some(Color::from(cosmic.bg_color()).into());
+        // Keep desktop labels transparent while preserving selection/hover feedback.
+        appearance.background = None;
         appearance.icon_color = Some(Color::from(cosmic.on_bg_color()));
         if cut {
             appearance.text_color = Some(Color::from(

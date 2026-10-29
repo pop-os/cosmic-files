@@ -10,3 +10,7 @@
 /test/
 /vendor.tar
 /vendor/
+
+/local-mods/show-desktop/target/
+
+/cosmic-files-applet.retired
