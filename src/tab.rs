@@ -3711,7 +3711,10 @@ impl Tab {
         bool,
     ) {
         let cosmic_theme::Spacing {
-            space_s, space_xxs, ..
+            space_s,
+            space_xxs,
+            space_xxxs,
+            ..
         } = theme::spacing();
 
         let TabConfig {
@@ -4077,7 +4080,10 @@ impl Tab {
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
-            let top_deduct = (if condensed || is_search { 6 } else { 9 }) * space_xxs;
+            let top_deduct: u16 = (if condensed | is_search { 0 } else { 3 }) * space_xxs
+                + 44
+                + row_height
+                + 3 * space_xxxs;
 
             self.item_view_size_opt
                 .set(self.size_opt.get().map(|s| Size {
@@ -4283,7 +4289,8 @@ impl Tab {
         }
         let mut tab_view = widget::container(tab_column)
             .height(Length::Fill)
-            .width(Length::Fill);
+            .width(Length::Fill)
+            .padding([0, 0, 8, 0]);
 
         // Desktop will not show DnD indicator
         if self.dnd_hovered.as_ref().map(|(l, _)| l) == Some(&tab_location)
