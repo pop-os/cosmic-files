@@ -3,6 +3,7 @@
 
 use cosmic::app::Settings;
 use cosmic::iced::Limits;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::{env, fs, process};
 use tracing_subscriber::layer::SubscriberExt;
@@ -149,7 +150,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (config_handler, config) = Config::load();
     let (state_handler, state) = State::load();
 
-    let mut daemonize = true;
+    let mut daemonize = std::io::stdin().is_terminal();
     let mut locations = Vec::new();
     let mut uris = Vec::new();
     for arg in env::args().skip(1) {
