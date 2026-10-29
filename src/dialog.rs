@@ -1039,6 +1039,13 @@ impl Application for App {
 
         let key_binds = key_binds(&tab.mode);
 
+        let mut mounter_items = FxHashMap::default();
+        for (&key, mounter) in MOUNTERS.iter() {
+            if let Some(items) = mounter.items(tab.config.icon_sizes) {
+                mounter_items.insert(key, items);
+            }
+        }
+
         let mut app = Self {
             core,
             flags,
@@ -1052,7 +1059,7 @@ impl Application for App {
             filter_selected: None,
             filename_id: widget::Id::new("Dialog Filename"),
             modifiers: Modifiers::empty(),
-            mounter_items: FxHashMap::default(),
+            mounter_items,
             nav_model: segmented_button::ModelBuilder::default().build(),
             result_opt: None,
             search_id: widget::Id::new("Dialog File Search"),
