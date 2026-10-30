@@ -1,7 +1,3 @@
-use crate::app::{ArchiveType, DialogPage, Message, REPLACE_BUTTON_ID};
-use crate::config::IconSizes;
-use crate::spawn_detached::spawn_detached;
-use crate::{archive, fl, tab};
 use cosmic::iced::futures::channel::mpsc::Sender;
 use cosmic::iced::futures::{self, SinkExt, StreamExt, stream};
 use std::borrow::Cow;
@@ -13,6 +9,13 @@ use std::sync::Arc;
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 use walkdir::WalkDir;
 use zip::AesMode::Aes256;
+
+use crate::app::{ArchiveType, DialogPage, Message, REPLACE_BUTTON_ID};
+use crate::config::IconSizes;
+use crate::item::item_from_path;
+use crate::spawn_detached::spawn_detached;
+use crate::trash::{Trash, TrashExt, TrashItem};
+use crate::{archive, fl};
 
 pub use self::controller::{Controller, ControllerState};
 pub mod controller;
@@ -33,7 +36,7 @@ async fn handle_replace(
     multiple: bool,
     conflict_count: usize,
 ) -> ReplaceResult {
-    let item_from = match tab::item_from_path(file_from, IconSizes::default()) {
+    let item_from = match item_from_path(file_from, IconSizes::default()) {
         Ok(ok) => Box::new(ok),
         Err(err) => {
             log::warn!("{err}");
@@ -41,7 +44,7 @@ async fn handle_replace(
         }
     };
 
-    let item_to = match tab::item_from_path(file_to, IconSizes::default()) {
+    let item_to = match item_from_path(file_to, IconSizes::default()) {
         Ok(ok) => Box::new(ok),
         Err(err) => {
             log::warn!("{err}");
@@ -366,7 +369,7 @@ pub enum Operation {
     },
     /// Delete a path from the trash
     DeleteTrash {
-        items: Vec<trash::TrashItem>,
+        items: Vec<TrashItem>,
     },
     /// Empty the trash
     EmptyTrash,
@@ -401,7 +404,7 @@ pub enum Operation {
     },
     /// Restore a path from the trash
     Restore {
-        items: Vec<trash::TrashItem>,
+        items: Vec<TrashItem>,
     },
     /// Set executable and launch
     SetExecutableAndLaunch {
@@ -858,107 +861,84 @@ impl Operation {
 
                     controller.set_progress((i as f32) / (total as f32));
 
-                    let _items_opt = compio::runtime::spawn_blocking(|| trash::delete(path))
+                    compio::runtime::spawn_blocking(|| Trash::trash(path))
                         .await
-                        .map_err(wrap_compio_spawn_error)?;
-                    //TODO: items_opt allows for easy restore
+                        .map_err(wrap_compio_spawn_error)?
+                        .map_err(|e| OperationError::from_err(e, &controller))?;
                 }
                 Ok(OperationSelection::default())
             }
             Self::DeleteTrash { items } => {
-                #[cfg(any(
-                    target_os = "windows",
-                    all(
-                        unix,
-                        not(target_os = "macos"),
-                        not(target_os = "ios"),
-                        not(target_os = "android")
-                    )
-                ))]
-                {
-                    let controller_clone = controller.clone();
-                    compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
-                        let controller = controller_clone;
-                        let count = items.len();
-                        for (i, item) in items.into_iter().enumerate() {
-                            futures::executor::block_on(async {
-                                controller
-                                    .check()
-                                    .await
-                                    .map_err(|s| OperationError::from_state(s, &controller))
-                            })?;
+                let controller_clone = controller.clone();
+                compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
+                    let controller = controller_clone;
+                    let count = items.len();
+                    for (i, item) in items.into_iter().enumerate() {
+                        futures::executor::block_on(async {
+                            controller
+                                .check()
+                                .await
+                                .map_err(|s| OperationError::from_state(s, &controller))
+                        })?;
 
-                            controller.set_progress(i as f32 / count as f32);
+                        controller.set_progress(i as f32 / count as f32);
 
-                            trash::os_limited::purge_all([item])
-                                .map_err(|e| OperationError::from_err(e, &controller))?;
-                        }
-                        Ok(())
-                    })
-                    .await
-                    .map_err(wrap_compio_spawn_error)?
-                    .map_err(|e| OperationError::from_err(e, &controller))?;
-                }
+                        Trash::purge(item).map_err(|e| OperationError::from_err(e, &controller))?;
+                    }
+                    Ok(())
+                })
+                .await
+                .map_err(wrap_compio_spawn_error)?
+                .map_err(|e| OperationError::from_err(e, &controller))?;
                 Ok(OperationSelection::default())
             }
             Self::EmptyTrash => {
-                #[cfg(any(
-                    target_os = "windows",
-                    all(
-                        unix,
-                        not(target_os = "macos"),
-                        not(target_os = "ios"),
-                        not(target_os = "android")
-                    )
-                ))]
-                {
-                    let controller_clone = controller.clone();
-                    compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
-                        let controller = controller_clone;
-                        let items = trash::os_limited::list()
-                            .map_err(|e| OperationError::from_err(e, &controller))?;
-                        let count = items.len();
-                        let mut errors: Vec<trash::Error> = Vec::new();
+                let controller_clone = controller.clone();
+                compio::runtime::spawn_blocking(move || -> Result<(), OperationError> {
+                    let controller = controller_clone;
+                    let items =
+                        Trash::list().map_err(|e| OperationError::from_err(e, &controller))?;
+                    let count = items.len();
+                    let mut errors: Vec<String> = Vec::new();
 
-                        for (i, item) in items.into_iter().enumerate() {
-                            futures::executor::block_on(async {
-                                controller
-                                    .check()
-                                    .await
-                                    .map_err(|s| OperationError::from_state(s, &controller))
-                            })?;
+                    for (i, item) in items.into_iter().enumerate() {
+                        futures::executor::block_on(async {
+                            controller
+                                .check()
+                                .await
+                                .map_err(|s| OperationError::from_state(s, &controller))
+                        })?;
 
-                            if let Err(e) = trash::os_limited::purge_all([item]) {
-                                errors.push(e);
-                            }
-
-                            controller.set_progress(i as f32 / count as f32);
+                        if let Err(e) = Trash::purge(item) {
+                            errors.push(e);
                         }
 
-                        // Report errors at the end
-                        if !errors.is_empty() {
-                            log::warn!("Failed to purge {} items:", errors.len());
-                            for e in &errors {
-                                log::warn!("  - {e}");
-                            }
+                        controller.set_progress(i as f32 / count as f32);
+                    }
 
-                            // Return an error to signal partial failure
-                            return Err(OperationError::from_err(
-                                format!(
-                                    "Failed to delete {} of {} items. Check log for details.",
-                                    errors.len(),
-                                    count
-                                ),
-                                &controller,
-                            ));
+                    // Report errors at the end
+                    if !errors.is_empty() {
+                        log::warn!("Failed to purge {} items:", errors.len());
+                        for e in &errors {
+                            log::warn!("  - {e}");
                         }
 
-                        Ok(())
-                    })
-                    .await
-                    .map_err(wrap_compio_spawn_error)?
-                    .map_err(|e| OperationError::from_err(e, &controller))?;
-                }
+                        // Return an error to signal partial failure
+                        return Err(OperationError::from_err(
+                            format!(
+                                "Failed to delete {} of {} items. Check log for details.",
+                                errors.len(),
+                                count
+                            ),
+                            &controller,
+                        ));
+                    }
+
+                    Ok(())
+                })
+                .await
+                .map_err(wrap_compio_spawn_error)?
+                .map_err(|e| OperationError::from_err(e, &controller))?;
                 Ok(OperationSelection::default())
             }
             Self::Extract {
@@ -1135,14 +1115,6 @@ impl Operation {
             }
             .await
             .map_err(wrap_compio_spawn_error)?,
-            #[cfg(target_os = "macos")]
-            Self::Restore { .. } => {
-                // TODO: add support for macos
-                return Err(OperationError::from_msg(
-                    "Restoring from trash is not supported on macos",
-                ));
-            }
-            #[cfg(not(target_os = "macos"))]
             Self::Restore { items } => {
                 let total = items.len();
                 let mut paths = Vec::with_capacity(total);
@@ -1154,24 +1126,12 @@ impl Operation {
 
                     controller.set_progress((i as f32) / (total as f32));
 
-                    paths.push(item.original_path());
+                    paths.push(item.original_path.clone());
 
-                    // Items with .trashinfo id use standard restore; sub-items use manual move
-                    if item.id.to_str().is_some_and(|s| s.ends_with(".trashinfo")) {
-                        compio::runtime::spawn_blocking(|| trash::os_limited::restore_all([item]))
-                            .await
-                            .map_err(wrap_compio_spawn_error)?
-                            .map_err(|e| OperationError::from_err(e, &controller))?;
-                    } else {
-                        let from = PathBuf::from(&item.id);
-                        let to = item.original_path();
-                        if let Some(parent) = to.parent() {
-                            std::fs::create_dir_all(parent)
-                                .map_err(|e| OperationError::from_err(e, &controller))?;
-                        }
-                        std::fs::rename(&from, &to)
-                            .map_err(|e| OperationError::from_err(e, &controller))?;
-                    }
+                    compio::runtime::spawn_blocking(|| Trash::restore(item))
+                        .await
+                        .map_err(wrap_compio_spawn_error)?
+                        .map_err(|e| OperationError::from_err(e, &controller))?;
                 }
                 Ok(OperationSelection {
                     ignored: Vec::new(),

@@ -4,7 +4,6 @@ use cosmic::{Task, widget};
 use gio::glib;
 use gio::prelude::*;
 use std::any::TypeId;
-use std::cell::Cell;
 use std::future::pending;
 use std::hash::Hash;
 use std::path::PathBuf;
@@ -14,7 +13,9 @@ use tokio::sync::mpsc;
 use super::{Mounter, MounterAuth, MounterItem, MounterItems, MounterMessage};
 use crate::config::IconSizes;
 use crate::err_str;
-use crate::tab::{self, ChecksumState, DirSize, ItemMetadata, ItemThumbnail, Location};
+use crate::item::{DirSize, Item, ItemMetadata, ItemState, ItemThumbnail};
+use crate::location::Location;
+use crate::scan::parse_hidden_file;
 
 const TARGET_URI_ATTRIBUTE: &str = "standard::target-uri";
 
@@ -73,7 +74,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
                 .map(|info| info.boolean(gio::FILE_ATTRIBUTE_FILESYSTEM_REMOTE))
                 .unwrap_or(true); // Default to remote if query fails
 
-            MounterItem::Gvfs(Item {
+            MounterItem::Gvfs(GvfsItem {
                 uri: mount.root().uri().into(),
                 kind: ItemKind::Mount,
                 index: i,
@@ -95,7 +96,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
                 let uri = VolumeExt::activation_root(&volume)
                     .map(|f| f.uri().into())
                     .unwrap_or_default();
-                MounterItem::Gvfs(Item {
+                MounterItem::Gvfs(GvfsItem {
                     // TODO can we get URI for volumes with no mount?
                     uri,
                     kind: ItemKind::Volume,
@@ -112,7 +113,7 @@ fn items(monitor: &gio::VolumeMonitor, sizes: IconSizes) -> MounterItems {
     items
 }
 
-fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
+fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<Item>, String> {
     let force_dir = uri.starts_with("network:///");
     let (_, file) = resolve_uri(uri);
 
@@ -120,7 +121,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
     let hidden_files: Box<[String]> = if let Some(path) = file.path() {
         let hidden_file_path = path.join(".hidden");
         if hidden_file_path.is_file() {
-            tab::parse_hidden_file(&hidden_file_path)
+            parse_hidden_file(&hidden_file_path)
         } else {
             Box::from([])
         }
@@ -224,7 +225,7 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             || info.boolean(gio::FILE_ATTRIBUTE_STANDARD_IS_HIDDEN)
             || hidden_files.contains(&name);
 
-        items.push(tab::Item {
+        items.push(Item {
             name,
             is_mount_point: false,
             display_name,
@@ -237,16 +238,9 @@ fn network_scan(uri: &str, sizes: IconSizes) -> Result<Vec<tab::Item>, String> {
             icon_handle_list,
             icon_handle_list_condensed,
             thumbnail_opt: Some(ItemThumbnail::NotImage),
-            button_id: widget::Id::unique(),
-            pos_opt: Cell::new(None),
-            rect_opt: Cell::new(None),
-            selected: false,
-            highlighted: false,
-            overlaps_drag_rect: false,
             //TODO: scan directory size on gvfs mounts?
             dir_size: DirSize::NotDirectory,
-            cut: false,
-            checksums: ChecksumState::default(),
+            state: ItemState::default(),
         });
     }
     Ok(items)
@@ -321,11 +315,7 @@ enum Cmd {
         tokio::sync::oneshot::Sender<anyhow::Result<()>>,
     ),
     NetworkDrive(String, tokio::sync::oneshot::Sender<anyhow::Result<()>>),
-    NetworkScan(
-        String,
-        IconSizes,
-        mpsc::Sender<Result<Vec<tab::Item>, String>>,
-    ),
+    NetworkScan(String, IconSizes, mpsc::Sender<Result<Vec<Item>, String>>),
     DirInfo(
         String,
         mpsc::Sender<Result<(String, String, Option<PathBuf>), glib::Error>>,
@@ -339,6 +329,7 @@ enum Event {
     MountResult(MounterItem, Result<bool, String>),
     NetworkAuth(String, MounterAuth, mpsc::Sender<MounterAuth>),
     NetworkResult(String, Result<bool, String>),
+    TrashChanged,
 }
 
 #[derive(Clone, Debug)]
@@ -349,7 +340,7 @@ enum ItemKind {
 
 //TODO: better method of matching items
 #[derive(Clone, Debug)]
-pub struct Item {
+pub struct GvfsItem {
     uri: String,
     kind: ItemKind,
     index: usize,
@@ -361,7 +352,7 @@ pub struct Item {
     path_opt: Option<PathBuf>,
 }
 
-impl Item {
+impl GvfsItem {
     pub fn name(&self) -> String {
         self.name.clone()
     }
@@ -463,6 +454,24 @@ impl Gvfs {
                         }
                     });
                 }
+
+                // For ease of use, trash is monitored here as well
+                let _tm = match crate::trash::trash_file().monitor(gio::FileMonitorFlags::NONE, gio::Cancellable::NONE) {
+                    Ok(tm) => {
+                        let event_tx = event_tx.clone();
+                        tm.connect_changed(move |_tm, _file, _other_file, _event_type| {
+                            log::info!("trash changed");
+                            if let Some(event_tx) = event_tx.upgrade() {
+                                event_tx.send(Event::TrashChanged);
+                            }
+                        });
+                        Some(tm)
+                    },
+                    Err(err) => {
+                        log::error!("failed to monitor trash with gio: {}", err);
+                        None
+                    }
+                };
 
                 while let Some(command) = command_rx.recv().await {
                     match command {
@@ -712,7 +721,7 @@ impl Mounter for Gvfs {
         )
     }
 
-    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>> {
+    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<Item>, String>> {
         let (items_tx, mut items_rx) = mpsc::channel(1);
         self.command_tx
             .send(Cmd::NetworkScan(uri.to_string(), sizes, items_tx))
@@ -782,6 +791,9 @@ impl Mounter for Gvfs {
                                     .send(MounterMessage::NetworkResult(uri, res))
                                     .await
                                     .unwrap(),
+                                Event::TrashChanged => {
+                                    output.send(MounterMessage::TrashChanged).await.unwrap()
+                                }
                             }
                         }
                         pending().await
