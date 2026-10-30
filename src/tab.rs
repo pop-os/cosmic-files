@@ -512,7 +512,7 @@ pub fn fs_kind(metadata: &Metadata) -> FsKind {
                             // FUSE-based remote filesystems
                             "fuse.rclone" | "fuse.sshfs" | "fuse.davfs2" | "fuse.ceph"
                             | "fuse.glusterfs" | "fuse.s3fs" | "fuse.goofys" | "fuse.gcsfuse"
-                            | "fuse.afp" | "fuse.afpfs" => FsKind::Remote,
+                            | "fuse.afp" | "fuse.afpfs" | "fuse.onedriver" => FsKind::Remote,
 
                             // Other network protocols
                             "afs" | "coda" | "ncpfs" | "davfs" | "davfs2" | "shfs" => {
