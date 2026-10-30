@@ -7,7 +7,7 @@ use std::sync::{Arc, LazyLock};
 use tokio::sync::mpsc;
 
 use crate::config::IconSizes;
-use crate::tab;
+use crate::item::Item;
 
 #[cfg(feature = "gvfs")]
 mod gvfs;
@@ -45,7 +45,7 @@ impl fmt::Debug for MounterAuth {
 #[derive(Clone, Debug)]
 pub enum MounterItem {
     #[cfg(feature = "gvfs")]
-    Gvfs(gvfs::Item),
+    Gvfs(gvfs::GvfsItem),
     #[allow(dead_code)]
     None,
 }
@@ -108,6 +108,7 @@ pub enum MounterMessage {
     MountResult(MounterItem, Result<bool, String>),
     NetworkAuth(String, MounterAuth, mpsc::Sender<MounterAuth>),
     NetworkResult(String, Result<bool, String>),
+    TrashChanged,
 }
 
 pub trait Mounter: Send + Sync {
@@ -115,7 +116,7 @@ pub trait Mounter: Send + Sync {
     //TODO: send result
     fn mount(&self, item: MounterItem) -> Task<()>;
     fn network_drive(&self, uri: String) -> Task<bool>;
-    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<tab::Item>, String>>;
+    fn network_scan(&self, uri: &str, sizes: IconSizes) -> Option<Result<Vec<Item>, String>>;
     fn dir_info(&self, uri: &str) -> Option<(String, String, Option<PathBuf>)>;
     fn unmount(&self, item: MounterItem) -> Task<()>;
     fn subscription(&self) -> Subscription<MounterMessage>;

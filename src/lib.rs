@@ -11,7 +11,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::app::{App, Flags};
 use crate::config::{Config, State};
-use crate::tab::Location;
+use crate::location::Location;
 
 pub mod app;
 mod archive;
@@ -20,16 +20,20 @@ pub mod clipboard;
 pub mod config;
 mod context_action;
 pub mod dialog;
+pub mod format_time;
+pub mod item;
 mod key_bind;
 pub(crate) mod large_image;
 pub(crate) mod load_image;
 mod localize;
+pub mod location;
 mod menu;
 mod mime_app;
 pub mod mime_icon;
 mod mounter;
 mod mouse_area;
 pub mod operation;
+pub mod scan;
 mod spawn_detached;
 pub mod tab;
 mod thumbnail_cacher;
@@ -41,6 +45,26 @@ pub(crate) type FxOrderMap<K, V> = ordermap::OrderMap<K, V, rustc_hash::FxBuildH
 
 pub(crate) fn err_str<T: ToString>(err: T) -> String {
     err.to_string()
+}
+
+//TODO: translate, add more levels?
+pub fn format_size(size: u64) -> String {
+    const KB: u64 = 1000;
+    const MB: u64 = 1000 * KB;
+    const GB: u64 = 1000 * MB;
+    const TB: u64 = 1000 * GB;
+
+    if size >= TB {
+        format!("{:.1} TB", size as f64 / TB as f64)
+    } else if size >= GB {
+        format!("{:.1} GB", size as f64 / GB as f64)
+    } else if size >= MB {
+        format!("{:.1} MB", size as f64 / MB as f64)
+    } else if size >= KB {
+        format!("{:.1} KB", size as f64 / KB as f64)
+    } else {
+        format!("{size} B")
+    }
 }
 
 pub fn desktop_dir() -> PathBuf {
@@ -111,7 +135,7 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
         settings = settings.no_main_window(true);
     }
 
-    let locations = vec![tab::Location::Desktop(desktop_dir(), String::new(), config.desktop)];
+    let locations = vec![Location::Desktop(desktop_dir(), String::new(), config.desktop)];
     let flags = Flags {
         config_handler,
         config,

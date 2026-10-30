@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::FxOrderMap;
 use crate::app::App;
-use crate::tab::{HeadingOptions, Location, View};
+use crate::location::Location;
+use crate::tab::{HeadingOptions, View};
 
 pub use crate::context_action::{ContextActionPreset, ContextActionSelection};
 
