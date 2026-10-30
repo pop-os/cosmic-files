@@ -35,7 +35,10 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     ".tar.gz",
     ".tar.lzma",
     ".tar.xz",
+    ".tb2",
+    ".tbz2",
     ".tgz",
+    ".txz",
     ".tar",
     ".zip",
 ];

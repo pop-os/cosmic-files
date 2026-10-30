@@ -71,8 +71,12 @@ async fn handle_replace(
 fn get_directory_name(file_name: &str) -> &str {
     // TODO: Chain with COMPOUND_EXTENSIONS once more formats are supported
     for ext in crate::archive::SUPPORTED_EXTENSIONS {
-        if let Some(stripped) = file_name.strip_suffix(ext) {
-            return stripped;
+        if let Some(at) = file_name.len().checked_sub(ext.len())
+            && let Some((stem, suffix)) = file_name.split_at_checked(at)
+            && !stem.is_empty()
+            && suffix.eq_ignore_ascii_case(ext)
+        {
+            return stem;
         }
     }
     file_name
@@ -118,7 +122,7 @@ async fn copy_or_move(
                 {
                     // `from`'s parent is equal to `to` which means we're copying to the same
                     // directory (duplicating files)
-                    let to = copy_unique_path(&from, to);
+                    let to = copy_unique_path(&from, to, from.is_dir());
                     Some((from, to))
                 } else if let Some(name) = from.file_name() {
                     let to = to.join(name);
@@ -238,7 +242,7 @@ pub async fn sync_to_disk(
     .await;
 }
 
-pub fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
+pub fn copy_unique_path(from: &Path, to: &Path, is_dir: bool) -> PathBuf {
     // List of compound extensions to check
     const COMPOUND_EXTENSIONS: &[&str] = &[
         ".tar.gz",
@@ -256,7 +260,7 @@ pub fn copy_unique_path(from: &Path, to: &Path) -> PathBuf {
 
     let mut to = to.to_owned();
     if let Some(file_name) = from.file_name().and_then(|name| name.to_str()) {
-        let (stem, ext) = if from.is_dir() {
+        let (stem, ext) = if is_dir {
             (file_name.to_string(), None)
         } else {
             let file_name = file_name.to_string();
@@ -991,7 +995,7 @@ impl Operation {
                                 if new_dir.exists()
                                     && let Some(new_dir_parent) = new_dir.parent()
                                 {
-                                    new_dir = copy_unique_path(&new_dir, new_dir_parent);
+                                    new_dir = copy_unique_path(&new_dir, new_dir_parent, true);
                                 }
 
                                 op_sel.ignored.push(path.clone());
@@ -1495,5 +1499,42 @@ mod tests {
         assert!(expected.exists(), "File should have been copied");
 
         Ok(())
+    }
+
+    #[test]
+    fn get_directory_name_strips_supported_archive_extensions() {
+        use super::get_directory_name;
+
+        let cases = [
+            ("archive.zip", "archive"),
+            ("ARCHIVE.ZIP", "ARCHIVE"),
+            ("Photos.Zip", "Photos"),
+            ("site.tar.gz", "site"),
+            ("SITE.TAR.GZ", "SITE"),
+            ("release.tbz2", "release"),
+            ("release.tb2", "release"),
+            ("dump.tar.bz2", "dump"),
+            ("old.tar.lzma", "old"),
+            ("release.tar.xz", "release"),
+            ("source.tgz", "source"),
+            ("source.tar", "source"),
+            ("logs.txz", "logs"),
+            ("logs.TXZ", "logs"),
+            ("my.photos.zip", "my.photos"),
+            ("テスト.zip", "テスト"),
+            // "İ" changes byte length when lowercased (2 to 3). Must find the split on the original name
+            ("İSTANBUL.ZIP", "İSTANBUL"),
+            // These names have no supported archive extension. Left unchanged
+            ("notes.txt", "notes.txt"),
+            ("zip", "zip"),
+            // Extension-only names would strip to an empty dir name; keep them as-is
+            (".zip", ".zip"),
+            (".tar.gz", ".tar.gz"),
+            // The ".zip" split point falls inside "é" (mid-char). Must not panic
+            ("é.zi", "é.zi"),
+        ];
+        for (file_name, expected) in cases {
+            assert_eq!(get_directory_name(file_name), expected, "for {file_name:?}");
+        }
     }
 }
