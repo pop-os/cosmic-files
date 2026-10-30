@@ -1018,15 +1018,38 @@ impl Tab {
             Rectangle::new(point, size)
         };
 
-        if rect.y < visible_rect.y {
+        let row_margin = match self.config.view {
+            View::List => {
+                let row_height = self
+                    .select_focus
+                    .and_then(|i| self.items_opt.as_ref()?.get(i))
+                    .and_then(|item| item.state.rect_opt.get())
+                    .map_or(0.0, |r| r.height);
+
+                // If space allows add margin to scroll
+                if 3.0 * row_height < visible_rect.height {
+                    row_height
+                } else if 2.0 * row_height < visible_rect.height {
+                    row_height / 2.0
+                } else {
+                    0.
+                }
+            }
+            _ => 0.,
+        };
+
+        if rect.y - row_margin < visible_rect.y {
             // Scroll up to rect
-            self.scroll_opt = Some(AbsoluteOffset { x: 0.0, y: rect.y });
+            self.scroll_opt = Some(AbsoluteOffset {
+                x: 0.0,
+                y: rect.y - row_margin,
+            });
             self.scroll_opt
-        } else if (rect.y + rect.height) > (visible_rect.y + visible_rect.height) {
+        } else if (rect.y + rect.height + row_margin) > (visible_rect.y + visible_rect.height) {
             // Scroll down to rect
             self.scroll_opt = Some(AbsoluteOffset {
                 x: 0.0,
-                y: rect.y + rect.height - visible_rect.height,
+                y: rect.y + rect.height - visible_rect.height + row_margin,
             });
             self.scroll_opt
         } else {
@@ -4080,10 +4103,8 @@ impl Tab {
         }
         //TODO: HACK If we don't reach the bottom of the view, go ahead and add a spacer to do that
         {
-            let top_deduct: u16 = (if condensed | is_search { 0 } else { 3 }) * space_xxs
-                + 44
-                + row_height
-                + 3 * space_xxxs;
+            let top_deduct: u16 =
+                (if condensed | is_search { 0 } else { 3 }) * space_xxs + 44 + 3 * space_xxxs;
 
             self.item_view_size_opt
                 .set(self.size_opt.get().map(|s| Size {
