@@ -64,3 +64,22 @@ Stop it and disable login activation:
 COSMIC Files is copyright its upstream authors and licensed GPL-3.0-only; see the root LICENSE.
 The window controller is adapted from [Samkit Jain's cosmic-ext-showdesktop](https://github.com/SamkitJain660/cosmic-ext-showdesktop), MIT licensed. Its MIT notice is retained in `show-desktop/LICENSE`.
 The corner Python script and helper scripts are provided under MIT; see `LICENSE` in this directory.
+
+## Manual desktop placement with grid snapping
+
+The custom desktop applet supports dragging icons to persistent grid cells, independently for each output. It keeps other icons in place, avoids occupied cells, preserves group shapes where space allows, and retains a position when an item is renamed on the same filesystem. New files fill available cells without rearranging saved icons. Monitor size changes reflow positions that no longer fit; excess icons remain reachable in the scrollable grid.
+
+Dragging an existing icon onto the desktop background updates layout metadata only. Dropping onto a folder keeps the existing file-move behavior. Dropping files from another folder uses the upstream copy/move operation and reserves cells for new, non-conflicting names.
+
+Positions are stored as hex-encoded UTF-8 names and grid coordinates in:
+
+`~/.config/cosmic/com.th3al3x.CosmicDesktopLayout/v1/<output-hash>.cells`
+
+The grid uses the configured desktop icon size and spacing. To disable manual placement, write `false` to `~/.config/cosmic/com.th3al3x.CosmicDesktopLayout/v1/enabled` and restart only `cosmic-files-applet`. Saved positions are kept for re-enabling it. Files in this directory are automatically included by the desktop backup pack's existing COSMIC configuration selection.
+
+Layout tests (no graphical session required):
+
+```sh
+rustc --edition=2024 --test src/desktop_layout.rs -o /tmp/cosmic-desktop-layout-tests
+/tmp/cosmic-desktop-layout-tests
+```

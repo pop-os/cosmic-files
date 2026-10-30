@@ -31,6 +31,7 @@ mod mouse_area;
 pub mod operation;
 mod spawn_detached;
 pub mod tab;
+mod desktop_layout;
 mod thumbnail_cacher;
 mod thumbnailer;
 pub(crate) mod trash;

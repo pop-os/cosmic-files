@@ -2,6 +2,7 @@
 
 Personal modifications for Pop!_OS 24.04 / COSMIC, based on upstream commit `3cc4b80` (COSMIC Files 1.11.0).
 
+- **Manual desktop layout:** drag icons to persistent grid-aligned cells without automatic reordering.
 - **Transparent desktop labels:** removes the background behind unselected desktop icon names. Selection and hover highlights remain.
 - **Bottom-right Show Desktop button:** a small 10 × 36 logical-pixel strip on each monitor. Left-click minimizes visible windows on active workspaces; click again restores the captured windows. Already minimized windows are left alone. Uses COSMIC Wayland protocols, with no pointer polling or animations.
 

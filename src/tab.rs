@@ -30,7 +30,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
@@ -1784,6 +1784,7 @@ pub enum Message {
     LocationMenuAction(LocationMenuAction),
     Drag(Option<Rectangle>),
     DragEnd,
+    DesktopDrop(ClipboardPaste, Point),
     EditLocation(Option<EditLocation>),
     EditLocationComplete(usize),
     EditLocationEnable,
@@ -2826,6 +2827,8 @@ pub struct Tab {
     pub(crate) parent_item_opt: Option<Box<Item>>,
     pub(crate) items_opt: Option<Vec<Item>>,
     pub dnd_hovered: Option<(Location, Instant)>,
+    desktop_layout: RefCell<Option<(String, crate::desktop_layout::Layout)>>,
+    desktop_grid: Cell<Option<crate::desktop_layout::Grid>>,
     pub(crate) scrollable_id: widget::Id,
     select_focus: Option<usize>,
     select_range: Option<(usize, usize)>,
@@ -2974,6 +2977,8 @@ impl Tab {
             select_range: None,
             clicked: None,
             dnd_hovered: None,
+            desktop_layout: RefCell::new(None),
+            desktop_grid: Cell::new(None),
             selected_clicked: false,
             last_right_click: None,
             search_context: None,
@@ -2998,6 +3003,24 @@ impl Tab {
     }
 
     pub fn set_items(&mut self, mut items: Vec<Item>) {
+        // Match a renamed desktop item by inode before replacing the scan snapshot.
+        #[cfg(unix)]
+        if matches!(self.mode, Mode::Desktop) {
+            use std::os::unix::fs::MetadataExt;
+            let names: BTreeSet<_> = items.iter().map(|item| &item.name).collect();
+            if let Some((_, layout)) = self.desktop_layout.borrow_mut().as_mut() {
+                for old in self.items_opt.iter().flatten().filter(|old| !names.contains(&old.name)) {
+                    if let ItemMetadata::Path { metadata: old_meta, .. } = &old.metadata {
+                        if let Some(new) = items.iter().find(|new| {
+                            matches!(&new.metadata, ItemMetadata::Path { metadata, .. }
+                                if metadata.dev() == old_meta.dev() && metadata.ino() == old_meta.ino())
+                        }) {
+                            layout.rename(&old.name, &new.name);
+                        }
+                    }
+                }
+            }
+        }
         let highlighted = self
             .items_opt
             .as_ref()
@@ -4740,6 +4763,12 @@ impl Tab {
                     self.sort_name = heading_option;
                 }
             }
+            Message::DesktopDrop(data, point) => {
+                self.dnd_hovered = None;
+                if !self.place_desktop_drop(&data, point) {
+                    return self.update(Message::Drop(Some((self.location.clone(), data))), modifiers);
+                }
+            }
             Message::Drop(Some((to, mut from))) => {
                 self.dnd_hovered = None;
                 match to {
@@ -5668,6 +5697,23 @@ impl Tab {
         .into()
     }
 
+    fn place_desktop_drop(&mut self, data: &ClipboardPaste, point: Point) -> bool {
+        let Location::Desktop(directory, ..) = &self.location else { return false; };
+        let Some(grid) = self.desktop_grid.get() else { return false; };
+        let internal = crate::desktop_layout::internal_drop(directory, &data.paths);
+        let all_keys: Vec<String> = self.items_opt.iter().flatten()
+            .filter(|item| item.pos_opt.get().is_some()).map(|item| item.name.clone()).collect();
+        let keys: Vec<String> = data.paths.iter().filter_map(|p| p.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .filter(|name| internal || !all_keys.contains(name)).collect();
+        let mut cache = self.desktop_layout.borrow_mut();
+        let Some((_, layout)) = cache.as_mut() else { return false; };
+        if !layout.enabled { return false; }
+        let scroll_y = self.scroll_opt.map_or(0.0, |p| p.y);
+        layout.move_group(&keys, &all_keys, grid.snap(point.x, point.y + scroll_y), grid);
+        internal
+    }
+
     pub fn grid_view(
         &self,
     ) -> (
@@ -5725,6 +5771,13 @@ impl Tab {
             rows_m1 + 1
         };
 
+        let manual_grid = crate::desktop_layout::Grid {
+            cols, rows, step_x: (item_width + column_spacing as usize) as f32,
+            step_y: (item_height + grid_spacing as usize) as f32,
+            padding: space_xxs as f32, item_width: item_width as f32, item_height: item_height as f32,
+        };
+        if matches!(self.location, Location::Desktop(..)) { self.desktop_grid.set(Some(manual_grid)); }
+
         //TODO: move to function
         let visible_rect = {
             // Use cached content height to clamp scroll offset after resize
@@ -5754,6 +5807,23 @@ impl Tab {
 
         let mut column = widget::column::with_capacity(2);
         if let Some(items) = self.column_sort() {
+            let manual_cells: Option<BTreeMap<usize, crate::desktop_layout::Cell>> =
+                if let Location::Desktop(_, output, _) = &self.location {
+                    let mut cache = self.desktop_layout.borrow_mut();
+                    if cache.as_ref().is_none_or(|(key, _)| key != output) {
+                        let directory = dirs::config_dir().unwrap_or_else(std::env::temp_dir)
+                            .join("cosmic/com.th3al3x.CosmicDesktopLayout/v1");
+                        let filename = format!("{:x}.cells", Sha256::digest(output.as_bytes()));
+                        *cache = Some((output.clone(), crate::desktop_layout::Layout::load(directory.join(filename))));
+                    }
+                    let (_, layout) = cache.as_mut().unwrap();
+                    if layout.enabled {
+                        let visible: Vec<_> = items.iter().filter(|(_, item)| show_hidden || !item.hidden).collect();
+                        let keys: Vec<_> = visible.iter().map(|(_, item)| item.name.clone()).collect();
+                        let cells = layout.resolve(&keys, manual_grid);
+                        Some(visible.iter().zip(cells).map(|((i, _), cell)| (*i, cell)).collect())
+                    } else { None }
+                } else { None };
             let mut count = 0;
             let mut col = 0;
             let mut row = 0;
@@ -5767,6 +5837,9 @@ impl Tab {
                     hidden += 1;
                     continue;
                 }
+                if let Some(cell) = manual_cells.as_ref().and_then(|cells| cells.get(&i)) {
+                    row = cell.row; col = cell.col;
+                }
                 item.pos_opt.set(Some((row, col)));
                 let item_rect = Rectangle::new(
                     Point::new(
@@ -5779,7 +5852,7 @@ impl Tab {
 
                 //TODO: error if the row or col is already set?
                 while grid_elements.len() <= row {
-                    grid_elements.push(Vec::new());
+                    grid_elements.push(BTreeMap::new());
                 }
 
                 // Only build elements if visible (for performance)
@@ -5854,11 +5927,11 @@ impl Tab {
                         .on_middle_press(move |_| Message::MiddleClick(i))
                         .on_enter(move || Message::HighlightActivate(i))
                         .on_exit(move || Message::HighlightDeactivate(i));
-                    grid_elements[row].push(Element::from(mouse_area));
+                    grid_elements[row].insert(col, Element::from(mouse_area));
                 } else {
                     // Add a spacer if the row is empty, so scroll works
                     if grid_elements[row].is_empty() {
-                        grid_elements[row].push(Element::from(
+                        grid_elements[row].insert(col, Element::from(
                             widget::column::with_capacity(0)
                                 .width(Length::Fill)
                                 .height(Length::Fixed(item_height as f32)),
@@ -5887,8 +5960,15 @@ impl Tab {
                 }
             }
 
-            for row_elements in grid_elements {
-                for element in row_elements {
+            for mut row_elements in grid_elements {
+                let row_cols = if manual_cells.is_some() { cols }
+                    else { row_elements.last_key_value().map_or(0, |(col, _)| col + 1) };
+                for col in 0..row_cols {
+                    let element = row_elements.remove(&col).unwrap_or_else(|| {
+                        widget::container(space::vertical())
+                            .width(Length::Fixed(item_width as f32))
+                            .height(Length::Fixed(item_height as f32)).into()
+                    });
                     grid = grid.push(element);
                 }
                 grid = grid.insert_row();
@@ -5932,6 +6012,7 @@ impl Tab {
             }
         }
 
+        dnd_items.sort_by_key(|(_, position, _)| *position);
         let drag_list = (!dnd_items.is_empty()).then(|| {
             let mut dnd_grid = widget::grid()
                 .column_spacing(column_spacing)
@@ -6611,6 +6692,8 @@ impl Tab {
 
         let tab_location_2 = self.location.clone();
         let tab_location_3 = self.location.clone();
+        let drop_location = self.location.clone();
+        let desktop_drop = matches!(self.mode, Mode::Desktop);
         let dnd_dest = DndDestination::for_data(tab_view, move |data, action| {
             if let Some(mut data) = data {
                 if action == DndAction::Copy {
@@ -6625,6 +6708,14 @@ impl Tab {
             } else {
                 Message::Drop(None)
             }
+        })
+        .on_finish(move |mime, bytes, action, x, y| {
+            let Ok(mut data) = ClipboardPaste::try_from((bytes, mime)) else { return Message::Drop(None); };
+            if action == DndAction::Move { data.kind = ClipboardKind::Cut { is_dnd: true }; }
+            else if action != DndAction::Copy { return Message::Drop(None); }
+            if desktop_drop {
+                Message::DesktopDrop(data, Point::new(x as f32, y as f32))
+            } else { Message::Drop(Some((drop_location.clone(), data))) }
         })
         .on_enter(move |_, _, _| Message::DndEnter(tab_location_2.clone()))
         .on_leave(move || Message::DndLeave(tab_location_3.clone()));
