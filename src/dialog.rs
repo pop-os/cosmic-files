@@ -22,7 +22,6 @@ use cosmic::{Application, ApplicationExt, Element, cosmic_config, cosmic_theme, 
 use mime_guess::{Mime, mime};
 use notify_debouncer_full::notify::{self, RecommendedWatcher};
 use notify_debouncer_full::{DebouncedEvent, Debouncer, RecommendedCache, new_debouncer};
-use recently_used_xbel::update_recently_used;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
@@ -39,9 +38,9 @@ use crate::config::{
 use crate::key_bind::key_binds;
 use crate::localize::LANGUAGE_SORTER;
 use crate::mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage};
-use crate::tab::{self, HeadingOptions, ItemMetadata, Location, SearchLocation, Tab};
+use crate::tab::{self, HeadingOptions, Location, SearchLocation, Tab};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
-use crate::{fl, home_dir, menu, mime_icon};
+use crate::{fl, home_dir, menu, mime_icon, recents};
 
 #[derive(Clone, Debug)]
 pub struct DialogMessage(cosmic::Action<Message>);
@@ -1564,54 +1563,8 @@ impl Application for App {
             Message::NotifyEvents(events) => {
                 log::debug!("{events:?}");
 
-                if let Some(path) = self.tab.location.path_opt() {
-                    let mut contains_change = false;
-                    for event in &events {
-                        for event_path in &event.paths {
-                            if event_path.starts_with(path) {
-                                if let notify::EventKind::Modify(
-                                    notify::event::ModifyKind::Metadata(_)
-                                    | notify::event::ModifyKind::Data(_),
-                                ) = event.kind
-                                {
-                                    // If metadata or data changed, find the matching item and reload it
-                                    //TODO: this could be further optimized by looking at what exactly changed
-                                    if let Some(items) = &mut self.tab.items_opt {
-                                        for item in items.iter_mut() {
-                                            if item.path_opt() == Some(event_path) {
-                                                //TODO: reload more, like mime types?
-                                                match fs::metadata(event_path) {
-                                                    Ok(new_metadata) => {
-                                                        if let ItemMetadata::Path {
-                                                            metadata, ..
-                                                        } = &mut item.metadata
-                                                        {
-                                                            *metadata = new_metadata;
-                                                        }
-                                                    }
-                                                    Err(err) => {
-                                                        log::warn!(
-                                                            "failed to reload metadata for {}: {}",
-                                                            path.display(),
-                                                            err
-                                                        );
-                                                    }
-                                                }
-                                                //TODO item.thumbnail_opt =
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    // Any other events reload the whole tab
-                                    contains_change = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    if contains_change {
-                        return self.rescan_tab(None);
-                    }
+                if self.tab.apply_notify_events(&events) {
+                    return self.rescan_tab(None);
                 }
             }
             Message::NotifyWatcher(mut watcher_wrapper) => match watcher_wrapper.watcher_opt.take()
@@ -1632,16 +1585,11 @@ impl Application for App {
                             && let Some(path) = item.path_opt()
                         {
                             paths.push(path.clone());
-                            if self.flags.config.show_recents {
-                                let _ = update_recently_used(
-                                    path,
-                                    Self::APP_ID.to_string(),
-                                    "cosmic-files".to_string(),
-                                    None,
-                                );
-                            }
                         }
                     }
+                }
+                if self.flags.config.show_recents {
+                    recents::add(paths.clone(), Self::APP_ID);
                 }
 
                 // Ensure selection is allowed

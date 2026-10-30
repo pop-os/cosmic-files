@@ -18,7 +18,6 @@ use crate::fl;
 use crate::tab::{
     self, HeadingOptions, ItemMetadata, Location, LocationMenuAction, SearchLocation, Tab,
 };
-use crate::trash::{Trash, TrashExt};
 
 static MENU_ID: LazyLock<cosmic::widget::Id> =
     LazyLock::new(|| cosmic::widget::Id::new("responsive-menu"));
@@ -84,6 +83,7 @@ pub fn context_menu(
     let mut selected_types: Vec<Mime> = vec![];
     let mut selected_mount_point = 0;
     let mut any_trash_item = false;
+    let mut trash_entries = 0;
     if let Some(items) = tab.items_opt() {
         for item in items {
             if item.selected {
@@ -94,7 +94,11 @@ pub fn context_menu(
                 }
                 match &item.location_opt {
                     Some(Location::Trash) | Some(Location::Search(SearchLocation::Trash, ..)) => {
-                        selected_trash_only = true
+                        selected_trash_only = true;
+                        // The trash item counted its entries when it was scanned
+                        if let ItemMetadata::SimpleDir { entries } = item.metadata {
+                            trash_entries = entries;
+                        }
                     }
                     Some(Location::Path(path))
                         if selected == 1
@@ -148,7 +152,7 @@ pub fn context_menu(
         ) => {
             if selected_trash_only {
                 children.push(menu_item(fl!("open"), Action::Open));
-                if !Trash::is_empty() {
+                if trash_entries > 0 {
                     children.push(menu_item(fl!("empty-trash"), Action::EmptyTrash));
                 }
             } else if let Some(entry) = selected_desktop_entry {
