@@ -8,7 +8,7 @@ use compio::BufResult;
 use compio::buf::{IntoInner, IoBuf};
 use compio::driver::ToSharedFd;
 use compio::driver::op::AsyncifyFd;
-use compio::io::{AsyncReadAt, AsyncWriteAt};
+use compio::io::{AsyncReadAt, AsyncWriteAtExt};
 use cosmic::iced::futures;
 use futures::{FutureExt, StreamExt};
 use std::cell::Cell;
@@ -559,7 +559,7 @@ impl Op {
             };
 
             let BufResult(result, buf_out_slice) =
-                to_file.write_at(buf_out.slice(..count), pos).await;
+                to_file.write_all_at(buf_out.slice(..count), pos).await;
             let buf_out = buf_out_slice.into_inner();
 
             if let Err(why) = result {
