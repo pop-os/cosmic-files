@@ -100,7 +100,7 @@ impl Context {
                 continue;
             }
 
-            for entry in WalkDir::new(&from_parent) {
+            for entry in WalkDir::new(&from_parent).follow_root_links(false) {
                 self.controller
                     .check()
                     .await
