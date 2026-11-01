@@ -112,3 +112,8 @@ context-action-confirm-warning =
     }.
 selected-items = The { $items } selected items
 rename-confirm = Rename
+history = History...
+show-details = Show details...
+sidebar-label = Sidebar label
+search-application = Search by app name
+change-sidebar-label = Change sidebar label
