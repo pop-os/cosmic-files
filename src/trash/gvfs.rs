@@ -122,8 +122,12 @@ pub fn item_from_trash_entry(entry: TrashItem, size: TrashItemSize, sizes: IconS
         }
     };
 
+    let path_opt = location_opt.as_ref().and_then(Location::path_opt);
+    let can_thumbnail = path_opt.is_some()
+        && matches!(size, TrashItemSize::Bytes(_))
+        && matches!(mime.type_(), mime::IMAGE | mime::VIDEO);
     let image_dimensions = (mime.type_() == mime::IMAGE)
-        .then(|| image::image_dimensions(&entry.original_path).ok())
+        .then(|| path_opt.and_then(|path| image::image_dimensions(path).ok()))
         .flatten();
 
     Item {
@@ -138,7 +142,7 @@ pub fn item_from_trash_entry(entry: TrashItem, size: TrashItemSize, sizes: IconS
         icon_handle_grid,
         icon_handle_list,
         icon_handle_list_condensed,
-        thumbnail_opt: Some(ItemThumbnail::NotImage),
+        thumbnail_opt: (!can_thumbnail).then_some(ItemThumbnail::NotImage),
         dir_size: DirSize::NotDirectory,
         state: ItemState::default(),
     }

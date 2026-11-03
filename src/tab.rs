@@ -4720,6 +4720,10 @@ impl Tab {
                 let metadata = item.metadata.clone();
                 let can_thumbnail = match metadata {
                     ItemMetadata::Path { .. } => true,
+                    ItemMetadata::Trash {
+                        size: TrashItemSize::Bytes(_),
+                        ..
+                    } => true,
                     #[cfg(feature = "gvfs")]
                     ItemMetadata::GvfsPath { .. } => true,
                     _ => false,
