@@ -247,6 +247,9 @@ impl Context {
                 total_bytes: None,
             };
             (self.on_progress)(&op, &progress);
+            if op.is_cleanup && !(dirty_fds.is_empty() && dirty_dirs.is_empty()) {
+                self.sync(&mut dirty_fds, &mut dirty_dirs).await?;
+            }
             let result = op.run(self, progress).await.map_err(|err| {
                 OperationError::from_err(
                     format!(
@@ -277,7 +280,17 @@ impl Context {
             }
         }
 
-        for path in dirty_dirs {
+        self.sync(&mut dirty_fds, &mut dirty_dirs).await?;
+
+        Ok(OpFlow::Continue)
+    }
+
+    async fn sync(
+        &self,
+        dirty_fds: &mut Vec<(compio::fs::File, PathBuf)>,
+        dirty_dirs: &mut HashSet<PathBuf>,
+    ) -> Result<(), OperationError> {
+        for path in dirty_dirs.drain() {
             let dir = compio::fs::OpenOptions::new()
                 .read(true)
                 .open(&path)
@@ -295,12 +308,9 @@ impl Context {
             dirty_fds.push((dir, path));
         }
 
-        // Flush dirty descriptors to disk
-        sync_to_disk(dirty_fds)
+        sync_to_disk(std::mem::take(dirty_fds))
             .await
-            .map_err(|e| OperationError::from_err(e, &self.controller))?;
-
-        Ok(OpFlow::Continue)
+            .map_err(|e| OperationError::from_err(e, &self.controller))
     }
 
     pub fn on_progress<F: OnProgress>(mut self, f: F) -> Self {
