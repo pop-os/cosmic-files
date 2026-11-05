@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 log.workspace = true
-zbus = "4" # Blocking connection in zbus 5 hangs
+zbus = "6"
 
 [dependencies.cosmic-files]
 path = ".."

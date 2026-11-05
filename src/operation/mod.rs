@@ -1,3 +1,4 @@
+use compio::runtime::JoinError;
 use cosmic::iced::futures::channel::mpsc::Sender;
 use cosmic::iced::futures::{self, SinkExt, StreamExt, stream};
 use std::borrow::Cow;
@@ -1230,17 +1231,19 @@ impl Operation {
 }
 
 #[track_caller]
-fn wrap_compio_spawn_error(err: Box<dyn std::any::Any + Send>) -> OperationError {
+fn wrap_compio_spawn_error(err: JoinError) -> OperationError {
     log::error!(
         "compio runtime spawn failed: {}",
         std::backtrace::Backtrace::capture()
     );
 
-    // Preserve error if it's already an OperationError
-    if let Ok(err) = err.downcast() {
-        *err
-    } else {
-        OperationError::from_msg("compio runtime spawn failed")
+    match err {
+        // Preserve error if it's already an OperationError
+        JoinError::Panicked(e) => match e.downcast() {
+            Ok(op_err) => *op_err,
+            Err(_) => OperationError::from_msg("compio runtime spawn failed"),
+        },
+        JoinError::Cancelled => OperationError::from_msg("compio runtime spawn was cancelled"),
     }
 }
 
