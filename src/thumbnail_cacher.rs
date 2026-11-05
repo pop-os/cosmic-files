@@ -306,8 +306,13 @@ fn thumbnail_uri(path: &Path) -> io::Result<String> {
 }
 
 fn thumbnail_cache_filename(file_uri: &str) -> String {
-    let hash = Md5::digest(file_uri);
-    format!("{hash:x}.png")
+    format!(
+        "{}.png",
+        Md5::digest(file_uri)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    )
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

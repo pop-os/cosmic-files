@@ -606,7 +606,11 @@ async fn calculate_checksums(path: &Path) -> Result<FileChecksums, String> {
         }
 
         Ok(FileChecksums {
-            sha256: format!("{:x}", sha256_hasher.finalize()),
+            sha256: sha256_hasher
+                .finalize()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect(),
         })
     })
     .await
