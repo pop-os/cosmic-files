@@ -33,7 +33,7 @@ trash::orig-path,\
 trash::deletion-date";
 
 fn percent_decode(s: &str) -> Option<String> {
-    let (mut r, mut b) = (String::with_capacity(s.len()), s.bytes());
+    let (mut r, mut b) = (Vec::with_capacity(s.len()), s.bytes());
     while let Some(c) = b.next() {
         if c == b'%' {
             let (hi, lo) = (b.next()?, b.next()?);
@@ -43,12 +43,12 @@ fn percent_decode(s: &str) -> Option<String> {
                 b'A'..=b'F' => Some(x - b'A' + 10),
                 _ => None,
             };
-            r.push((h(hi)? << 4 | h(lo)?) as char);
+            r.push(h(hi)? << 4 | h(lo)?);
         } else {
-            r.push(c as char);
+            r.push(c);
         }
     }
-    Some(r)
+    String::from_utf8(r).ok()
 }
 
 /// For a path inside a trash `files/` directory, reconstruct the original path
