@@ -8,7 +8,7 @@ use cosmic::widget::menu::{self, ItemHeight, ItemWidth, MenuBar};
 use cosmic::widget::{self, responsive_menu_bar};
 use cosmic::{Element, theme};
 use i18n_embed::LanguageLoader;
-use mime_guess::Mime;
+use mime_guess::{Mime, mime};
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
@@ -206,6 +206,10 @@ pub fn context_menu(
                 if !action_items.is_empty() {
                     children.push(menu::Item::Divider);
                     children.extend(action_items);
+                }
+                if selected_types.iter().any(|t| t.type_() == mime::IMAGE) {
+                    children.push(menu::Item::Divider);
+                    children.push(menu_item(fl!("set-as-wallpaper"), Action::SetAsWallpaper));
                 }
                 children.push(menu::Item::Divider);
                 if selected_mount_point == 0 {
