@@ -70,7 +70,7 @@ file-already-exists = Ja existeix un fitxer amb aquest nom
 folder-already-exists = Ja existeix una carpeta amb aquest nom
 name-hidden = Els noms que comencin amb "." s'ocultaran.
 name-invalid = El nom no pot ser "{ $filename }"
-name-no-slashes = El nom no pot contenir barres.
+name-no-slashes = El nom no pot contenir barres inclinades
 
 ## Open/Save Dialog
 
@@ -79,9 +79,9 @@ create = Crea
 open = Obre
 open-file = Obre el fitxer
 open-folder = Obre la carpeta
-open-in-new-tab = Obre en una pestanya nova
-open-in-new-window = Obre en una finestra nova
-open-item-location = Obre la ubicació del fitxer
+open-in-new-tab = Obre a una pestanya nova
+open-in-new-window = Obre a una finestra nova
+open-item-location = Obre la ubicació de l'element
 open-multiple-files = Obre múltiples fitxers
 open-multiple-folders = Obre múltiples carpetes
 save = Desa
@@ -89,38 +89,38 @@ save-file = Desa el fitxer
 
 ## Open With Dialog
 
-open-with-title = Com voleu obrir "{ $name }"?
+open-with-title = Com voleu obrir «{ $name }»?
 browse-store = Navega { $store }
 
 ## Rename Dialog
 
-rename-file = Canvia el nom del fitxer
-rename-folder = Canvia el nom de la carpeta
+rename-file = Reanomena el fitxer
+rename-folder = Reanomena la carpeta
 
 ## Replace Dialog
 
-replace = Reemplaça
-replace-title = Ja existeix "{ $filename }" en aquesta ubicació.
-replace-warning = Voleu reemplaçar-lo pel fitxer que esteu desant? El seu contingut serà sobreescrit.
-replace-warning-operation = Voleu reemplaçar-lo? El seu contingut serà sobreescrit.
+replace = Substitueix
+replace-title = «{ $filename }» ja existeix aquí
+replace-warning = Voleu substituir-lo amb el fitxer que esteu desant? Substituir el fitxer sobreescriurà el seu contingut.
+replace-warning-operation = Voleu reemplaçar-lo? Reemplaçar el fitxer sobreescriurà el seu contingut.
 original-file = Fitxer original
 replace-with = Reemplaça amb
 apply-to-all = Aplica-ho a tot
-keep-both = Mantén els dos
+keep-both = Conserva ambdós
 skip = Omet
 
 ## Set as Executable and Launch Dialog
 
-set-executable-and-launch = Defineix com a executable i executa
-set-executable-and-launch-description = Voleu definir "{ $name }" com a executable i executar-lo?
-set-and-launch = Defineix i executa
+set-executable-and-launch = Marca com a executable i executa
+set-executable-and-launch-description = Voleu marcar «{ $name }» com a executable i executar-lo?
+set-and-launch = Marca i executa
 
 ## Metadata Dialog
 
 open-with = Obre amb
 owner = Propietari
 group = Grup
-other = Altre
+other = Altres
 
 ### Mode 0
 
@@ -162,103 +162,103 @@ read-write-execute = Llegir, escriure i executar
 
 ## Add Network Drive
 
-add-network-drive = Afegeix una unitat de la xarxa
+add-network-drive = Afegeix una unitat de xarxa
 connect = Connecta
 connect-anonymously = Connecta anònimament
 connecting = Connectant...
 domain = Domini
 enter-server-address = Introduïu l'adreça del servidor
 network-drive-description =
-    Les adreces de servidor estan formades per un prefix del protocol i una adreça.
-    Examples: ssh://192.168.0.1, ftp://[2001:db8::1]
+    Les adreces de servidor inclouen un prefix de protocol i una adreça.
+    Exemples: ssh://192.168.0.1, ftp://[2001:db8::1]
 
 ### Make sure to keep the comma which separates the columns
 
 network-drive-schemes =
     Protocols disponibles,Prefix
     AppleTalk,afp://
-    File Transfer Protocol,ftp:// or ftps://
+    File Transfer Protocol,ftp:// o ftps://
     Network File System,nfs://
     Server Message Block,smb://
-    SSH File Transfer Protocol,sftp:// or ssh://
-    WebDav,dav:// or davs://
-network-drive-error = No s'ha pogut accedir a la unitat de la xarxa
+    SSH File Transfer Protocol,sftp:// o ssh://
+    WebDav,dav:// o davs://
+network-drive-error = No s'ha pogut accedir a la unitat de xarxa
 password = Contrasenya
 remember-password = Recorda la contrasenya
-try-again = Torna-ho a provar
+try-again = Torna-ho a intentar
 username = Nom d'usuari
 
 ## Operations
 
-cancelled = Cancel·lat
-edit-history = Edita l'historial
+cancelled = Cancel·lades
+edit-history = Historial d'edicions
 history = Historial
-no-history = Historial buit.
-pending = Pendent
-progress = { $percent }%
-progress-cancelled = { $percent }%, cancel·lat
-progress-paused = { $percent }%, en pausa
-failed = Ha fallat
-complete = Complet
+no-history = Cap ítem a l'historial.
+pending = Pendents
+progress = { $percent } %
+progress-cancelled = { $percent } %, cancel·lat
+progress-paused = { $percent } %, en pausa
+failed = Fallides
+complete = Completades
 compressing =
     { $items ->
         [one] S'està comprimint { $items } element
        *[other] S'estan comprimint { $items } elements
-    } de "{ $from }" a "{ $to }" ({ $progress })...
+    } de «{ $from }» a «{ $to }» ({ $progress })...
 compressed =
     { $items ->
         [one] S'ha comprimit { $items } element
        *[other] S'han comprimit { $items } elements
-    } de "{ $from }" a "{ $to }"
+    } de «{ $from }» a «{ $to }»
 copy_noun = Copia
-creating = S'està creant "{ $name }" a "{ $parent }"
-created = S'ha creat "{ $name }" a "{ $parent }"
+creating = S'està creant «{ $name }» a «{ $parent }»
+created = S'ha creat «{ $name }» a «{ $parent }»
 copying =
     { $items ->
         [one] S'està copiant { $items } element
        *[other] S'estan copiant { $items } elements
-    } de "{ $from }" a "{ $to }" ({ $progress })...
+    } de «{ $from }» a «{ $to }» ({ $progress })...
 copied =
     { $items ->
         [one] S'ha copiat { $items } element
        *[other] S'han copiat { $items } elements
-    } de "{ $from }" a "{ $to }"
-emptying-trash = S'està buidant { trash } ({ $progress })...
-emptied-trash = S'ha buidat { trash }
+    } de «{ $from }» a «{ $to }»
+emptying-trash = S'està buidant la { trash } ({ $progress })...
+emptied-trash = S'ha buidat la { trash }
 extracting =
     { $items ->
         [one] S'està extraient { $items } element
        *[other] S'estan extraient { $items } elements
-    } de "{ $from }" a "{ $to }" ({ $progress })...
+    } de «{ $from }» a «{ $to }» ({ $progress })...
 extracted =
     { $items ->
         [one] S'ha extret { $items } element
        *[other] S'han extret { $items } elements
-    } de "{ $from }" a "{ $to }"
-setting-executable-and-launching = S'està definint "{ $name }" com a executable i executant
-set-executable-and-launched = S'ha definit "{ $name }" com a executable i executat
+    } de «{ $from }» a «{ $to }»
+setting-executable-and-launching = S'està marcant «{ $name }» com a executable i executant
+set-executable-and-launched = S'ha marcat «{ $name }» com a executable i s'ha executat
 moving =
     { $items ->
         [one] S'està movent { $items } element
        *[other] S'estan movent { $items } elements
-    } de "{ $from }" a "{ $to }" ({ $progress })...
+    } de «{ $from }» a «{ $to }» ({ $progress })...
 moved =
     { $items ->
         [one] S'ha mogut { $items } element
        *[other] S'han mogut { $items } elements
-    } de "{ $from }" a "{ $to }"
-renaming = S'està canviant el nom de "{ $from }" a "{ $to }"
-renamed = S'ha canviat el nom de "{ $from }" a "{ $to }"
+    } de «{ $from }» a «{ $to }»
+renaming = S'està reanomenant «{ $from }» a «{ $to }»
+renamed = S'ha reanomenat «{ $from }» a «{ $to }»
 restoring =
     { $items ->
         [one] S'està restaurant { $items } element
        *[other] S'estan restaurant { $items } elements
-    } de { trash } ({ $progress })...
+    } de la { trash } ({ $progress })...
 restored =
     { $items ->
         [one] S'ha restaurat { $items } element
        *[other] S'han restaurat { $items } elements
-    } de { trash }
+    } de la { trash }
 unknown-folder = carpeta desconeguda
 
 ## Open with
@@ -285,19 +285,19 @@ settings = Configuració
 
 appearance = Aparença
 theme = Tema
-match-desktop = Coincideix amb l'escriptori
+match-desktop = Igual que el sistema
 dark = Fosc
 light = Clar
 # Context menu
 add-to-sidebar = Afegeix a la barra lateral
-compress = Comprimeix
+compress = Comprimeix...
 extract-here = Extreu
 new-file = Nou fitxer...
 new-folder = Nova carpeta...
 open-in-terminal = Obre al terminal
 move-to-trash = Mou a la paperera
-restore-from-trash = Restaura de la paperera
-remove-from-sidebar = Elimina de la barra lateral
+restore-from-trash = Restaura des de la paperera
+remove-from-sidebar = Treu de la barra lateral
 sort-by-name = Ordena per nom
 sort-by-modified = Ordena per data de modificació
 sort-by-size = Ordena per mida
@@ -307,7 +307,7 @@ sort-by-trashed = Ordena per data de supressió
 
 change-wallpaper = Canvia el fons de pantalla...
 desktop-appearance = Aparença de l'escriptori...
-display-settings = Configuració de visualització...
+display-settings = Configuració de pantalla...
 
 # Menu
 
@@ -315,9 +315,9 @@ display-settings = Configuració de visualització...
 ## File
 
 file = Fitxer
-new-tab = Pestanya nova
-new-window = Finestra nova
-rename = Canvia el nom...
+new-tab = Nova pestanya
+new-window = Nova finestra
+rename = Reanomena...
 close-tab = Tanca la pestanya
 quit = Surt
 
@@ -327,7 +327,7 @@ edit = Edita
 cut = Retalla
 copy = Copia
 paste = Enganxa
-select-all = Selecciona-ho tot
+select-all = Selecciona‐ho tot
 
 ## View
 
@@ -338,7 +338,7 @@ view = Visualització
 grid-view = Vista de graella
 list-view = Vista de llista
 show-hidden-files = Mostra els fitxers ocults
-list-directories-first = Mostra els directoris primer
+list-directories-first = Mostra les carpetes primer
 gallery-preview = Vista prèvia en galeria
 menu-settings = Configuració...
 menu-about = Quant a Fitxers del COSMIC...
@@ -348,8 +348,8 @@ menu-about = Quant a Fitxers del COSMIC...
 sort = Ordena
 sort-a-z = A-Z
 sort-z-a = Z-A
-sort-newest-first = Primer més recents
-sort-oldest-first = Primer més antics
+sort-newest-first = Més recents primer
+sort-oldest-first = Més antics primer
 sort-smallest-to-largest = De petit a gran
 sort-largest-to-smallest = De gran a petit
 run = Executa
@@ -363,3 +363,83 @@ copy-to-button-label = Copia
 move-to-title = Escolliu el destí del trasllat
 move-to-button-label = Mou
 keywords = Carpeta;Fitxers;Arxius;Gestor;Explorador;
+related-apps = Aplicacions relacionades
+permanently-delete-warning = { $target } se suprimirà permanentment. Aquesta operació és irreversible.
+other-apps = Altres aplicacions
+selected-items = Els { $items } elements seleccionats
+context-action-confirm-title = Executar «{ $name }»?
+context-action-confirm-warning =
+    Aquesta operació s'executarà sobre { $items } { $items ->
+        [one] ítem
+       *[other] ítems
+    }.
+permanently-delete-question = Suprimir permanentment?
+context-action = Acció contextual
+sidebar-label = Etiqueta de la barra lateral
+favorite-path-error = Error en obrir la carpeta
+type-to-search-enter-path = Introdueix el camí a un directori o fitxer
+favorite-path-error-description =
+    No es pot obrir «{ $path }».
+    «{ $path }» potser no existeix o podríeu no tenir permisos per obrir‐lo
+
+    Voleu suprimir‐lo de la barra lateral?
+support = Suport
+eject = Expulsa
+type-to-search = Escriure per a cercar
+type-to-search-recursive = Cerca a la carpeta actual i totes les seves subcarpetes
+delete-permanently = Suprimeix permanentment
+deleted =
+    { $items ->
+        [one] S'ha suprimit { $items } element
+       *[other] S'han suprimit { $items } elements
+    } de la { trash }
+reload-folder = Recarrega la carpeta
+removing-from-recents =
+    { $items ->
+        [one] S'està traient { $items } element
+       *[other] S'estan traient { $items } elements
+    } de { recents }
+set-permissions = S'han establert els permisos per a «{ $name }» a { $mode }
+keep = Manté
+permanently-deleting =
+    { $items ->
+        [one] S'està suprimint { $items } element
+       *[other] S'estan suprimint { $items } elements
+    } permanentment
+repository = Repositori
+remove-from-recents = Treu dels recents
+deleting =
+    { $items ->
+        [one] S'està suprimint { $items } fitxer
+       *[other] S'estan suprimint { $items } fitxers
+    } de la { trash } ({ $progress })...
+single-click = Obre amb un sol clic
+setting-permissions = Establint els permisos per a «{ $name }» a { $mode }
+removed-from-recents =
+    { $items ->
+        [one] S'ha tret { $items } element
+       *[other] S'han tret { $items } elements
+    } de { recents }
+progress-failed = { $percent } %, ha fallat
+permanently-deleted =
+    { $items ->
+        [one] S'ha suprimit { $items } element
+       *[other] S'han suprimit { $items } elements
+    } permanentment
+remove = Elimina
+pasted-image = Imatge Enganxada
+pasted-text = Text Enganxat
+pasted-video = Vídeo Enganxat
+show-recents = Carpetes recents a la barra lateral
+type-to-search-select = Selecciona el primer fitxer o carpeta coincident
+clear-recents-history = Neteja l'historial de Recents
+copy-to = Copia a...
+move-to = Mou a...
+copy-path = Copia el camí
+rename-confirm = Reanomena
+mixed = Mixt
+checksum = Suma de verificació { $kind }
+calculate = Calcula
+error = Error
+search-application = Cerca per nom de l'aplicació
+change-sidebar-label = Canvia l'etiqueta de la barra lateral
