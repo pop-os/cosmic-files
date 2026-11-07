@@ -1268,6 +1268,16 @@ mod tests {
     use crate::app::{DialogPage, Message};
     use crate::fl;
 
+    #[cfg(unix)]
+    use {
+        super::OperationErrorType,
+        crate::app::test_utils::{
+            file_flat_hier,
+            fuse::{BadFs, DIE_ON_FSYNC},
+            rand_string,
+        },
+    };
+
     /// Simple wrapper around `[Operation::Copy]`
     pub async fn operation_copy(
         paths: Vec<PathBuf>,
@@ -1475,6 +1485,55 @@ mod tests {
 
         assert!(file_path.exists(), "Original file should still exist");
         assert!(expected.exists(), "File should have been copied");
+
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test(compio::test)]
+    async fn move_preserves_src_on_failed_sync() -> io::Result<()> {
+        let fs = empty_fs()?;
+        let root = fs.path();
+        let prefix = rand_string(8);
+        let (_files, paths) = file_flat_hier(root, 3, &prefix)?
+            .into_iter()
+            .collect::<(Vec<_>, Vec<_>)>();
+        let bad_fs = BadFs::new(DIE_ON_FSYNC);
+        let (_handle, bad_fs_root) = bad_fs.mount()?;
+
+        let (tx, _rx) = mpsc::channel(1);
+        let err = Operation::Move {
+            paths: paths.clone(),
+            to: bad_fs_root.path().to_path_buf(),
+            cross_device_copy: true,
+        }
+        .perform(&sync::Mutex::new(tx).into(), Controller::default())
+        .await
+        .expect_err("Operation should have failed to sync");
+
+        // If either of these panics trigger, that means either COSMIC Files changed the error
+        // message or FUSE failed at an unexpected function. The latter case can happen if we change
+        // the move code causing an unimplemented FUSE function to fail. Both of these cases are
+        // easy fixes, but I'm mentioning it here to prevent someone searching for an hour wondering
+        // why the test fails with a cryptic file system error.
+        let OperationError {
+            kind: OperationErrorType::Generic(err),
+        } = err
+        else {
+            panic!("Unexpected error: {err:?}");
+        };
+        assert!(
+            err.contains("failed to sync files to disk"),
+            "Unexpected error: {err}"
+        );
+
+        for path in paths {
+            assert!(
+                path.exists(),
+                "{} deleted after failed fsync",
+                path.display()
+            );
+        }
 
         Ok(())
     }
