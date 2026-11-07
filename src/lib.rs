@@ -21,6 +21,7 @@ pub mod config;
 mod context_action;
 pub mod dialog;
 pub mod format_time;
+mod icon_cache;
 pub mod item;
 mod key_bind;
 pub(crate) mod large_image;
@@ -34,6 +35,7 @@ mod mounter;
 mod mouse_area;
 pub mod operation;
 pub mod scan;
+mod shortcuts;
 mod spawn_detached;
 pub mod tab;
 mod thumbnail_cacher;
@@ -123,6 +125,7 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
     localize::localize();
 
     let (config_handler, config) = Config::load();
+    let shortcuts_config = shortcuts::ShortcutsConfig::new(config.shortcuts_custom.clone());
     let (state_handler, state) = State::load();
 
     let mut settings = Settings::default();
@@ -139,6 +142,7 @@ pub fn desktop() -> Result<(), Box<dyn std::error::Error>> {
     let flags = Flags {
         config_handler,
         config,
+        shortcuts_config,
         state_handler,
         state,
         mode: app::Mode::Desktop,
@@ -172,6 +176,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     localize::localize();
 
     let (config_handler, config) = Config::load();
+    let shortcuts_config = shortcuts::ShortcutsConfig::new(config.shortcuts_custom.clone());
+
     let (state_handler, state) = State::load();
 
     let mut daemonize = std::io::stdin().is_terminal();
@@ -241,6 +247,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let flags = Flags {
         config_handler,
         config,
+        shortcuts_config,
         state_handler,
         state,
         mode: app::Mode::App,

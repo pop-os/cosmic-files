@@ -1,6 +1,7 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+use crate::icon_cache::IconCache;
 use crate::scan::has_recents;
 use crate::trash::TrashItem;
 use cosmic::app::{self, Core, Task, context_drawer};
@@ -8,6 +9,7 @@ use cosmic::core::Auto;
 use cosmic::cosmic_config::{self, ConfigSet};
 use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::core::SmolStr;
+use cosmic::iced::core::keyboard::key::Named;
 use cosmic::iced::core::widget::operation::focusable::unfocus;
 use cosmic::iced::futures::{self, SinkExt};
 use cosmic::iced::keyboard::key::Physical;
@@ -31,6 +33,7 @@ use cosmic::iced::{
         Anchor, KeyboardInteractivity, Layer, destroy_layer_surface,
     },
 };
+use cosmic::style;
 use cosmic::widget::about::About;
 use cosmic::widget::dnd_destination::DragId;
 use cosmic::widget::menu::action::MenuAction;
@@ -44,12 +47,13 @@ use notify_debouncer_full::{DebouncedEvent, Debouncer, RecommendedCache, new_deb
 use rustc_hash::{FxHashMap, FxHashSet};
 use slotmap::Key as SlotMapKey;
 use std::any::TypeId;
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::future::Future;
 use std::num::NonZeroU16;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{self, Duration, Instant};
 use std::{env, fmt, fs, io, process};
 use tokio::sync::mpsc;
@@ -77,6 +81,7 @@ use crate::operation::{
     Controller, Operation, OperationError, OperationErrorType, OperationSelection, ReplaceResult,
     copy_unique_path,
 };
+use crate::shortcuts;
 use crate::spawn_detached::spawn_detached;
 use crate::tab::{self, HOVER_DURATION, HeadingOptions, SORT_OPTION_FALLBACK, Tab};
 use crate::trash::{Trash, TrashExt};
@@ -110,6 +115,13 @@ static MOUNT_ERROR_TRY_AGAIN_BUTTON_ID: LazyLock<widget::Id> =
 pub(crate) static REPLACE_BUTTON_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("replace-button"));
 
+static ICON_CACHE: LazyLock<Mutex<IconCache>> = LazyLock::new(|| Mutex::new(IconCache::new()));
+
+pub fn icon_cache_get(name: &'static str, size: u16) -> widget::icon::Icon {
+    let mut icon_cache = ICON_CACHE.lock().unwrap();
+    icon_cache.get(name, size)
+}
+
 #[derive(Clone, Debug)]
 pub enum Mode {
     App,
@@ -120,6 +132,7 @@ pub enum Mode {
 pub struct Flags {
     pub config_handler: Option<cosmic_config::Config>,
     pub config: Config,
+    pub shortcuts_config: shortcuts::ShortcutsConfig,
     pub state_handler: Option<cosmic_config::Config>,
     pub state: State,
     pub mode: Mode,
@@ -159,6 +172,7 @@ pub enum Action {
     ItemRight,
     ItemUp,
     LocationUp,
+    KeyboardShortcuts,
     MoveTo,
     NewFile,
     NewFolder,
@@ -234,6 +248,7 @@ impl Action {
             Self::ItemRight => Message::TabMessage(entity_opt, tab::Message::ItemRight),
             Self::ItemUp => Message::TabMessage(entity_opt, tab::Message::ItemUp),
             Self::LocationUp => Message::TabMessage(entity_opt, tab::Message::LocationUp),
+            Self::KeyboardShortcuts => Message::ToggleContextPage(ContextPage::KeyboardShortcuts),
             Self::MoveTo => Message::MoveTo(entity_opt),
             Self::NewFile => Message::NewItem(entity_opt, false),
             Self::NewFolder => Message::NewItem(entity_opt, true),
@@ -437,6 +452,13 @@ pub enum Message {
     SetShowDetails(bool),
     SetShowRecents(bool),
     SetTypeToSearch(TypeToSearch),
+    ShortcutCaptureCancel,
+    ShortcutCaptureStart(shortcuts::KeyBindAction),
+    ShortcutConflictCancel,
+    ShortcutConflictReplace,
+    ShortcutRemove(shortcuts::Binding, shortcuts::BindingSource),
+    ShortcutReset(shortcuts::KeyBindAction),
+    ShortcutSearch(String),
     SystemThemeModeChange,
     Size(window::Id, Size),
     TabActivate(Entity),
@@ -489,6 +511,7 @@ pub enum Message {
 pub enum ContextPage {
     About,
     EditHistory,
+    KeyboardShortcuts,
     NetworkDrive,
     Preview(Option<Entity>, PreviewKind),
     Settings,
@@ -699,6 +722,13 @@ impl PartialEq for WatcherWrapper {
     }
 }
 
+#[derive(Clone, Debug)]
+struct ShortcutConflict {
+    binding: shortcuts::Binding,
+    existing_action: shortcuts::KeyBindAction,
+    new_action: shortcuts::KeyBindAction,
+}
+
 struct Window {
     kind: WindowKind,
     modifiers: Modifiers,
@@ -723,6 +753,7 @@ pub struct App {
     config_handler: Option<cosmic_config::Config>,
     state_handler: Option<cosmic_config::Config>,
     config: Config,
+    shortcuts_config: shortcuts::ShortcutsConfig,
     state: State,
     mode: Mode,
     app_themes: Vec<String>,
@@ -749,6 +780,13 @@ pub struct App {
     failed_operations: BTreeMap<u64, (Operation, Controller, String)>,
     scrollable_id: widget::Id,
     search_id: widget::Id,
+    shortcut_capture: Option<shortcuts::KeyBindAction>,
+    shortcut_conflict: Option<ShortcutConflict>,
+    shortcut_conflict_overlay_restore: Option<bool>,
+    shortcut_search_focus: Cell<bool>,
+    shortcut_search_id: widget::Id,
+    shortcut_search_regex: Option<regex::Regex>,
+    shortcut_search_value: String,
     size: Option<Size>,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     layer_sizes: FxHashMap<window::Id, Size>,
@@ -2093,6 +2131,188 @@ impl App {
             .spacing(space_m)
             .into()
     }
+    fn save_shortcuts_custom(&mut self) {
+        self.config.shortcuts_custom = self.shortcuts_config.custom.clone();
+        match &self.config_handler {
+            Some(config_handler) => {
+                if let Err(err) =
+                    config_handler.set("shortcuts_custom", &self.config.shortcuts_custom)
+                {
+                    log::warn!("failed to save shortcuts custom config: {}", err);
+                }
+            }
+            None => {
+                log::warn!("failed to save shortcuts custom config: no config handler");
+            }
+        }
+        self.key_binds = key_binds(
+            &self.shortcuts_config,
+            &match self.mode {
+                Mode::App => tab::Mode::App,
+                Mode::Desktop => tab::Mode::Desktop,
+            },
+        );
+    }
+
+    fn apply_shortcut_binding(
+        &mut self,
+        binding: shortcuts::Binding,
+        action: shortcuts::KeyBindAction,
+    ) {
+        self.shortcuts_config.custom.0.insert(binding, action);
+        self.save_shortcuts_custom();
+    }
+
+    fn set_context_overlay(&mut self, overlay: bool) {
+        if self.core.window.context_is_overlay != overlay {
+            self.core.window.context_is_overlay = overlay;
+            self.core.set_show_context(self.core.window.show_context);
+        }
+    }
+
+    fn begin_shortcut_conflict(&mut self, conflict: ShortcutConflict) {
+        if self.shortcut_conflict.is_none() {
+            self.shortcut_conflict_overlay_restore = Some(self.core.window.context_is_overlay);
+            self.set_context_overlay(false);
+        }
+        self.shortcut_conflict = Some(conflict);
+    }
+
+    fn clear_shortcut_conflict(&mut self) {
+        self.shortcut_conflict = None;
+        if let Some(overlay) = self.shortcut_conflict_overlay_restore.take() {
+            self.set_context_overlay(overlay);
+        }
+    }
+
+    fn shortcut_page_toggle(&mut self) {
+        self.shortcut_capture = None;
+        self.clear_shortcut_conflict();
+        self.shortcut_search_focus
+            .set(self.core.window.show_context);
+        self.shortcut_search_regex = None;
+        self.shortcut_search_value.clear();
+    }
+
+    fn keyboard_shortcuts(&self) -> Element<'_, Message> {
+        let cosmic_theme::Spacing {
+            space_xxs,
+            space_s,
+            space_m,
+            space_l,
+            space_xl,
+            ..
+        } = self.core().system_theme().cosmic().spacing;
+
+        let pad_action = [space_xxs, space_m];
+        let div_action = space_s;
+        let pad_binding = [space_xxs, space_xl];
+        let div_binding = space_l;
+
+        let mut groups = Vec::new();
+        //TODO: fix text input focus going outside bounds
+        groups.push(widget::space::horizontal().into());
+        groups.push(
+            widget::text_input::search_input(fl!("type-to-search"), &self.shortcut_search_value)
+                .id(self.shortcut_search_id.clone())
+                .on_input(Message::ShortcutSearch)
+                .into(),
+        );
+
+        for group in shortcuts::shortcut_groups() {
+            let mut list = widget::list::list_column();
+
+            let mut found_actions = false;
+            for action in group.actions {
+                let action_label = shortcuts::action_label(action);
+                if let Some(regex) = &self.shortcut_search_regex
+                    && regex.find(&action_label).is_none()
+                {
+                    continue;
+                }
+                found_actions = true;
+
+                let (bindings, changed) = self.shortcuts_config.bindings_for_action(action);
+
+                let mut buttons = widget::row::with_capacity(2);
+                if changed {
+                    buttons = buttons.push(widget::tooltip(
+                        widget::button::custom(icon_cache_get("edit-undo-symbolic", 16))
+                            .class(style::Button::Icon)
+                            .on_press(Message::ShortcutReset(action)),
+                        widget::text::body(fl!("reset-to-default")),
+                        widget::tooltip::Position::Top,
+                    ));
+                }
+                buttons = buttons.push(widget::tooltip(
+                    widget::button::custom(icon_cache_get("list-add-symbolic", 16))
+                        .class(style::Button::Icon)
+                        .on_press(Message::ShortcutCaptureStart(action)),
+                    widget::text::body(fl!("add-another-keybinding")),
+                    widget::tooltip::Position::Top,
+                ));
+
+                list = list.list_item_padding(pad_action);
+                list = list.divider_padding(div_action);
+                list = list.add(widget::settings::item_row(vec![
+                    widget::text::heading(action_label)
+                        .width(Length::Fill)
+                        .into(),
+                    buttons.into(),
+                ]));
+
+                if bindings.is_empty() {
+                    list = list.list_item_padding(pad_binding);
+                    list = list.add(widget::text::body(fl!("no-shortcuts")));
+                    list = list.divider_padding(div_binding);
+                } else {
+                    for resolved in bindings {
+                        list = list.list_item_padding(pad_binding);
+                        list = list.add(
+                            widget::settings::item::builder(shortcuts::binding_display(
+                                &resolved.binding,
+                            ))
+                            .control(
+                                widget::button::custom(icon_cache_get("edit-delete-symbolic", 16))
+                                    .class(style::Button::Icon)
+                                    .on_press(Message::ShortcutRemove(
+                                        resolved.binding.clone(),
+                                        resolved.source,
+                                    )),
+                            ),
+                        );
+                        list = list.divider_padding(div_binding);
+                    }
+                }
+
+                if self.shortcut_capture == Some(action) {
+                    list = list.list_item_padding(pad_binding);
+                    list = list.add(
+                        widget::settings::item_row(vec![
+                            widget::text::body(fl!("shortcut-capture-hint"))
+                                .width(Length::Fill)
+                                .into(),
+                            widget::button::text(fl!("cancel"))
+                                .on_press(Message::ShortcutCaptureCancel)
+                                .into(),
+                        ])
+                        .spacing(space_xxs),
+                    );
+                    list = list.divider_padding(div_binding);
+                }
+            }
+
+            if found_actions {
+                groups.push(
+                    widget::settings::section::with_column(list)
+                        .title(group.title)
+                        .into(),
+                );
+            }
+        }
+
+        widget::settings::view_column(groups).into()
+    }
 
     fn preview<'a>(
         &'a self,
@@ -2342,10 +2562,13 @@ impl Application for App {
 
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
 
-        let key_binds = key_binds(&match flags.mode {
-            Mode::App => tab::Mode::App,
-            Mode::Desktop => tab::Mode::Desktop,
-        });
+        let key_binds = key_binds(
+            &flags.shortcuts_config,
+            &match flags.mode {
+                Mode::App => tab::Mode::App,
+                Mode::Desktop => tab::Mode::Desktop,
+            },
+        );
 
         // Create a dedicated thread for the compio runtime to handle operations on.
         // Supports io_uring on Linux, IOPC on Windows, and polling everywhere else.
@@ -2392,6 +2615,7 @@ impl Application for App {
             config_handler: flags.config_handler,
             state_handler: flags.state_handler,
             config: flags.config,
+            shortcuts_config: flags.shortcuts_config,
             state: flags.state,
             mode: flags.mode,
             app_themes,
@@ -2418,6 +2642,14 @@ impl Application for App {
             failed_operations: BTreeMap::new(),
             scrollable_id: widget::Id::new("File Scrollable"),
             search_id: widget::Id::new("File Search"),
+            shortcut_capture: None,
+            shortcut_conflict: None,
+            shortcut_conflict_overlay_restore: None,
+            shortcut_search_focus: Cell::new(true),
+            shortcut_search_id: widget::Id::unique(),
+            shortcut_search_regex: None,
+            shortcut_search_value: String::new(),
+
             size: None,
             #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
             surface_ids: FxHashMap::default(),
@@ -2770,6 +3002,18 @@ impl Application for App {
         // Usually, the Escape key (for example) closes menus and panes one by one instead
         // of closing everything on one press
         if self.core.window.show_context {
+            if let ContextPage::KeyboardShortcuts = self.context_page {
+                // Cancel shortcut capture
+                if self.shortcut_capture.take().is_some() {
+                    return Task::none();
+                }
+
+                // Cancel shortcut conflict dialog
+                if self.shortcut_conflict.take().is_some() {
+                    return Task::none();
+                }
+            }
+
             self.set_show_context(false);
             return cosmic::task::message(cosmic::action::app(Message::SetShowDetails(false)));
         }
@@ -3327,6 +3571,35 @@ impl Application for App {
                 }
             }
             Message::Key(window_id, modifiers, key, physical_key, text) => {
+                match key {
+                    Key::Named(Named::Escape) => {
+                        // Handled by on_escape
+                        return Task::none();
+                    }
+                    _ => {}
+                }
+
+                if let Some(action) = self.shortcut_capture {
+                    if let Some(binding) = shortcuts::binding_from_key(modifiers, key) {
+                        self.shortcut_capture = None;
+                        if let Some(existing_action) =
+                            self.shortcuts_config.action_for_binding(&binding)
+                        {
+                            if existing_action != action {
+                                self.begin_shortcut_conflict(ShortcutConflict {
+                                    binding,
+                                    existing_action,
+                                    new_action: action,
+                                });
+                                return Task::none();
+                            }
+                            return Task::none();
+                        }
+                        self.apply_shortcut_binding(binding, action);
+                    }
+                    return Task::none();
+                }
+
                 #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
                 let in_surface_ids = self.surface_ids.values().any(|id| *id == window_id);
                 #[cfg(not(all(feature = "wayland", feature = "desktop-applet")))]
@@ -4333,6 +4606,61 @@ impl Application for App {
             Message::SearchInput(input) => {
                 return self.search_set_active(Some(input));
             }
+            Message::ShortcutCaptureCancel => {
+                self.shortcut_capture = None;
+            }
+            Message::ShortcutCaptureStart(action) => {
+                self.shortcut_capture = Some(action);
+            }
+            Message::ShortcutConflictCancel => {
+                self.clear_shortcut_conflict();
+            }
+            Message::ShortcutConflictReplace => {
+                if let Some(conflict) = self.shortcut_conflict.clone() {
+                    self.apply_shortcut_binding(conflict.binding, conflict.new_action);
+                }
+                self.clear_shortcut_conflict();
+            }
+            Message::ShortcutRemove(binding, source) => {
+                match source {
+                    shortcuts::BindingSource::Default => {
+                        self.shortcuts_config
+                            .custom
+                            .0
+                            .insert(binding, shortcuts::KeyBindAction::Disable);
+                    }
+                    shortcuts::BindingSource::Custom => {
+                        self.shortcuts_config.custom.0.remove(&binding);
+                    }
+                }
+                self.save_shortcuts_custom();
+            }
+            Message::ShortcutReset(reset_action) => {
+                self.shortcuts_config.reset_action(reset_action);
+                self.save_shortcuts_custom();
+            }
+
+            Message::ShortcutSearch(search) => {
+                self.shortcut_search_focus.set(true);
+                self.shortcut_search_regex = None;
+                if !search.is_empty() {
+                    let pattern = regex::escape(&search);
+                    match regex::RegexBuilder::new(&pattern)
+                        .case_insensitive(true)
+                        .build()
+                    {
+                        Ok(regex) => {
+                            self.shortcut_search_regex = Some(regex);
+                        }
+                        Err(err) => {
+                            log::warn!("failed to parse regex {:?}: {}", pattern, err);
+                        }
+                    };
+                }
+                self.shortcut_search_value = search;
+                return widget::text_input::focus(self.shortcut_search_id.clone());
+            }
+
             Message::SetShowDetails(show_details) => {
                 config_set!(show_details, show_details);
                 return self.update_config();
@@ -4745,6 +5073,12 @@ impl Application for App {
                         self.core.window.show_context,
                     )));
                 }
+                if matches!(self.context_page, ContextPage::KeyboardShortcuts) {
+                    self.shortcut_page_toggle();
+                    if self.core.window.show_context {
+                        return widget::text_input::focus(self.shortcut_search_id.clone());
+                    }
+                }
             }
             Message::Undo(_id) => {
                 // TODO: undo
@@ -4763,9 +5097,10 @@ impl Application for App {
                             for path in &*recently_trashed {
                                 for item in &items {
                                     if let ItemMetadata::Trash { ref entry, .. } = item.metadata
-                                        && &entry.original_path == path {
-                                            paths.push(entry.clone());
-                                        }
+                                        && &entry.original_path == path
+                                    {
+                                        paths.push(entry.clone());
+                                    }
                                 }
                             }
                         }
@@ -5400,6 +5735,11 @@ impl Application for App {
                 Message::ToggleContextPage(ContextPage::EditHistory),
             )
             .title(fl!("edit-history")),
+            ContextPage::KeyboardShortcuts => context_drawer::context_drawer(
+                self.keyboard_shortcuts(),
+                Message::ToggleContextPage(ContextPage::KeyboardShortcuts),
+            )
+            .title(fl!("keyboard-shortcuts")),
             ContextPage::NetworkDrive => {
                 let mut text_input =
                     widget::text_input(fl!("enter-server-address"), &self.network_drive_input);
@@ -5458,6 +5798,33 @@ impl Application for App {
     }
 
     fn dialog(&self) -> Option<Element<'_, Message>> {
+        if let Some(conflict) = self.shortcut_conflict.as_ref() {
+            let binding = shortcuts::binding_display(&conflict.binding);
+            let existing = shortcuts::action_label(conflict.existing_action);
+            let new_action = shortcuts::action_label(conflict.new_action);
+            let body = fl!(
+                "shortcut-replace-body",
+                binding = binding.as_str(),
+                existing = existing.as_str(),
+                new_action = new_action.as_str()
+            );
+
+            return Some(
+                widget::dialog()
+                    .title(fl!("shortcut-replace-title"))
+                    .body(body)
+                    .primary_action(
+                        widget::button::suggested(fl!("replace"))
+                            .on_press(Message::ShortcutConflictReplace),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel"))
+                            .on_press(Message::ShortcutConflictCancel),
+                    )
+                    .into(),
+            );
+        };
+
         //TODO: should gallery view just be a dialog?
         let entity = self.tab_model.active();
         if let Some(tab) = self.tab_model.data::<Tab>(entity)
