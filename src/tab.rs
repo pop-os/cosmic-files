@@ -21,13 +21,14 @@ use cosmic::{Apply, Element, cosmic_theme, font, theme};
 use i18n_embed::LanguageLoader;
 use icu::datetime::{DateTimeFormatter, fieldsets};
 use mime_guess::{Mime, mime};
-use rustc_hash::FxHashMap;
+use notify_debouncer_full::{DebouncedEvent, notify};
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, File};
@@ -50,7 +51,7 @@ use crate::dialog::DialogKind;
 use crate::format_time::{FormatTime, date_time_formatter, format_time, time_formatter};
 use crate::item::{
     ChecksumState, DirSize, FileChecksums, Item, ItemMetadata, ItemThumbnail, SearchItem,
-    folder_name, item_from_path, item_from_search_item,
+    item_from_path, item_from_search_item,
 };
 use crate::large_image::{
     LargeImageManager, decode_large_image, should_use_dedicated_worker, should_use_tiling,
@@ -73,8 +74,8 @@ pub const THUMBNAIL_SIZE: u32 = (ICON_SIZE_GRID as u32) * (ICON_SCALE_MAX as u32
 
 // Thumbnail generation semaphore - limits parallel thumbnail workers
 // Uses 4 workers for balanced throughput and memory usage
-pub static THUMB_SEMAPHORE: LazyLock<tokio::sync::Semaphore> =
-    LazyLock::new(|| tokio::sync::Semaphore::const_new(num_cpus::get().min(4)));
+pub static THUMB_SEMAPHORE: LazyLock<Arc<tokio::sync::Semaphore>> =
+    LazyLock::new(|| Arc::new(tokio::sync::Semaphore::new(num_cpus::get().min(4))));
 
 pub(crate) static SORT_OPTION_FALLBACK: LazyLock<FxHashMap<String, (HeadingOptions, bool)>> =
     LazyLock::new(|| {
@@ -563,7 +564,11 @@ pub struct Tab {
     time_formatter: DateTimeFormatter<fieldsets::T>,
     window_id: Option<window::Id>,
     large_image_manager: LargeImageManager,
+    items_cache: VecDeque<(Location, Vec<Item>)>,
 }
+
+const ITEMS_CACHE_LOCATIONS: usize = 3;
+const ITEMS_CACHE_ITEMS: usize = 10_000;
 
 async fn calculate_dir_size(path: &Path, controller: Controller) -> Result<u64, OperationError> {
     let mut total = 0;
@@ -670,6 +675,7 @@ impl Tab {
             time_formatter: time_formatter(config.military_time),
             window_id,
             large_image_manager: LargeImageManager::new(),
+            items_cache: VecDeque::new(),
         }
     }
 
@@ -686,19 +692,116 @@ impl Tab {
         self.items_opt.as_mut()
     }
 
-    pub fn set_items(&mut self, mut items: Vec<Item>) {
-        let highlighted = self
-            .items_opt
-            .as_ref()
-            .and_then(|items| items.iter().enumerate().find(|i| i.1.state.highlighted))
-            .map(|(i, _)| i);
-        let selected = self.selected_locations();
+    /// Returns true if the tab needs a rescan
+    pub(crate) fn apply_notify_events(&mut self, events: &[DebouncedEvent]) -> bool {
+        let Some(path) = self.location.path_opt() else {
+            return false;
+        };
+        let mut modified_paths = FxHashSet::default();
+        for event in events {
+            for event_path in &event.paths {
+                if event_path.starts_with(path) {
+                    if let notify::EventKind::Modify(
+                        notify::event::ModifyKind::Metadata(_) | notify::event::ModifyKind::Data(_),
+                    ) = event.kind
+                    {
+                        modified_paths.insert(event_path);
+                    } else {
+                        // Any other events reload the whole tab
+                        return true;
+                    }
+                }
+            }
+        }
+        if modified_paths.is_empty() {
+            return false;
+        }
+
+        // If metadata or data changed, find the matching item and reload it
+        //TODO: this could be further optimized by looking at what exactly changed
+        if let Some(items) = &mut self.items_opt {
+            for item in items.iter_mut() {
+                let Some(item_path) = item.path_opt() else {
+                    continue;
+                };
+                if !modified_paths.contains(item_path) {
+                    continue;
+                }
+                //TODO: reload more, like mime types?
+                match fs::metadata(item_path) {
+                    Ok(new_metadata) => {
+                        if let ItemMetadata::Path { metadata, .. } = &mut item.metadata {
+                            *metadata = new_metadata;
+                        }
+                    }
+                    Err(err) => {
+                        log::warn!(
+                            "failed to reload metadata for {}: {}",
+                            item_path.display(),
+                            err
+                        );
+                    }
+                }
+                //TODO item.thumbnail_opt =
+            }
+        }
+        false
+    }
+
+    fn take_cached_items(&mut self) -> Option<Vec<Item>> {
+        let index = self
+            .items_cache
+            .iter()
+            .position(|(location, _)| *location == self.location)?;
+        let (_, mut items) = self.items_cache.remove(index)?;
         for item in &mut items {
             item.state.selected = false;
-            if let Some(location) = &item.location_opt
-                && selected.contains(location)
-            {
-                item.state.selected = true;
+            item.state.highlighted = false;
+            item.state.overlaps_drag_rect = false;
+            item.state.pos_opt.set(None);
+            item.state.rect_opt.set(None);
+        }
+        Some(items)
+    }
+
+    fn cache_items(&mut self, location: Location, items: Vec<Item>) {
+        self.items_cache.retain(|(cached, _)| *cached != location);
+        if items.len() > ITEMS_CACHE_ITEMS {
+            return;
+        }
+        self.items_cache.push_front((location, items));
+        let mut total = 0;
+        let keep = self
+            .items_cache
+            .iter()
+            .take(ITEMS_CACHE_LOCATIONS)
+            .take_while(|(_, items)| {
+                total += items.len();
+                total <= ITEMS_CACHE_ITEMS
+            })
+            .count();
+        self.items_cache.truncate(keep);
+    }
+
+    pub fn set_items(&mut self, mut items: Vec<Item>) {
+        let old_items = self.items_opt.take().unwrap_or_default();
+        let highlighted = old_items.iter().position(|item| item.state.highlighted);
+        let selected: FxHashSet<Location> = old_items
+            .iter()
+            .filter(|item| item.state.selected)
+            .filter_map(|item| item.location_opt.clone())
+            .collect();
+        let mut old_by_path: FxHashMap<PathBuf, Item> = old_items
+            .into_iter()
+            .filter_map(|item| Some((item.path_opt()?.clone(), item)))
+            .collect();
+        for item in &mut items {
+            item.state.selected = item
+                .location_opt
+                .as_ref()
+                .is_some_and(|location| selected.contains(location));
+            if let Some(old) = item.path_opt().and_then(|path| old_by_path.remove(path)) {
+                item.keep_loaded_from(old);
             }
         }
         self.items_opt = Some(items);
@@ -719,14 +822,14 @@ impl Tab {
     }
 
     pub fn refresh_cut(&mut self, locations: &[PathBuf]) {
+        let locations: FxHashSet<&PathBuf> = locations.iter().collect();
         if let Some(ref mut items) = self.items_opt {
             for item in items.iter_mut() {
-                item.state.cut = false;
-                if let Some(location_path) = item.location_opt.as_ref().and_then(Location::path_opt)
-                    && locations.contains(location_path)
-                {
-                    item.state.cut = true;
-                }
+                item.state.cut = item
+                    .location_opt
+                    .as_ref()
+                    .and_then(Location::path_opt)
+                    .is_some_and(|path| locations.contains(path));
             }
         }
     }
@@ -898,6 +1001,7 @@ impl Tab {
 
     pub fn select_paths(&mut self, paths: Vec<PathBuf>) {
         self.select_focus = None;
+        let paths: FxHashSet<PathBuf> = paths.into_iter().collect();
         if let Some(ref mut items) = self.items_opt {
             for (i, item) in items.iter_mut().enumerate() {
                 item.state.selected = false;
@@ -1181,11 +1285,21 @@ impl Tab {
     }
 
     pub fn change_location(&mut self, location: &Location, history_i_opt: Option<usize>) {
-        self.location = location.normalize();
+        let previous_location = std::mem::replace(&mut self.location, location.normalize());
         self.location_ancestors = self.location.ancestors();
         self.location_title = self.location.title();
         self.edit_location = None;
-        self.items_opt = None;
+        let previous_items = self.items_opt.take();
+        if previous_location == self.location {
+            self.items_opt = previous_items;
+        } else {
+            self.items_opt = self.take_cached_items();
+            if let Some(items) = previous_items
+                && !matches!(previous_location, Location::Search(..))
+            {
+                self.cache_items(previous_location, items);
+            }
+        }
         //TODO: remember scroll by location?
         self.scroll_opt = None;
         self.select_focus = None;
@@ -2630,6 +2744,11 @@ impl Tab {
                                 self.location.path_opt().map(|path| vec![path.clone()]);
                         }
                         self.change_location(&location, history_i_opt);
+                        if self.items_opt.is_some()
+                            && let Some(paths) = &selected_paths
+                        {
+                            self.select_paths(paths.clone());
+                        }
                         commands.push(Command::ChangeLocation(
                             self.title(),
                             location,
@@ -3204,16 +3323,19 @@ impl Tab {
 
         let mut children: Vec<Element<_>> = Vec::new();
         match &self.location {
-            Location::Desktop(path, ..)
-            | Location::Path(path)
-            | Location::Search(SearchLocation::Path(path), ..) => {
+            Location::Desktop(..)
+            | Location::Path(..)
+            | Location::Search(SearchLocation::Path(..), ..) => {
                 let excess_str = "...";
                 let excess_width = text_width_body(excess_str);
-                for (index, ancestor) in path.ancestors().enumerate() {
-                    let (name, found_home) = folder_name(ancestor);
+                let ancestors = self.location_ancestors.iter().enumerate();
+                for (index, (ancestor_location, name)) in ancestors {
+                    let Some(ancestor) = ancestor_location.path_opt() else {
+                        continue;
+                    };
                     let (name_width, name_text) = if children.is_empty() {
                         (
-                            text_width_heading(&name),
+                            text_width_heading(name),
                             widget::text::heading(name)
                                 .wrapping(text::Wrapping::None)
                                 .ellipsize(text::Ellipsize::End(
@@ -3229,7 +3351,7 @@ impl Tab {
                         );
                         w += 16.0;
                         (
-                            text_width_body(&name),
+                            text_width_body(name),
                             widget::text::body(name).wrapping(text::Wrapping::None),
                         )
                     };
@@ -3260,7 +3382,8 @@ impl Tab {
                             } else {
                                 theme::Button::Link
                             })
-                            .on_press(if ancestor == path {
+                            // The first ancestor is the location itself
+                            .on_press(if index == 0 {
                                 Message::EditLocation(Some(self.location.clone().into()))
                             } else {
                                 Message::Location(location.clone())
@@ -3285,7 +3408,7 @@ impl Tab {
                     }
                     children.push(self.dnd_dest(&location, context_menu));
 
-                    if found_home || overflow {
+                    if overflow {
                         break;
                     }
                 }
@@ -4796,10 +4919,12 @@ impl Tab {
                                     let message = {
                                         let path = path.clone();
 
-                                        // Acquire semaphore permit
-                                        let _permit = THUMB_SEMAPHORE.acquire().await.unwrap();
+                                        // Held until the work is done, even if the folder is left
+                                        let permit =
+                                            THUMB_SEMAPHORE.clone().acquire_owned().await.unwrap();
 
                                         tokio::task::spawn_blocking(move || {
+                                            let _permit = permit;
                                             let start = Instant::now();
                                             let thumbnail = ItemThumbnail::new(
                                                 &path,
@@ -5703,6 +5828,175 @@ mod tests {
                 thumb
             ),
         }
+        Ok(())
+    }
+
+    fn new_tab(path: &std::path::Path) -> Tab {
+        Tab::new(
+            Location::Path(path.into()),
+            TabConfig::default(),
+            ThumbCfg::default(),
+            None,
+            widget::Id::unique(),
+            None,
+        )
+    }
+
+    fn rescan(tab: &mut Tab) {
+        let (_, items) = tab.location.scan(IconSizes::default());
+        tab.set_items(items);
+    }
+
+    fn item<'a>(tab: &'a Tab, name: &str) -> &'a super::Item {
+        tab.items_opt
+            .as_ref()
+            .and_then(|items| items.iter().find(|item| item.name == name))
+            .expect("tab should have the item")
+    }
+
+    fn handle_id(handle: &widget::icon::Handle) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        handle.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    #[test]
+    fn rescan_keeps_what_was_loaded_for_unchanged_files() -> io::Result<()> {
+        let fs = empty_fs()?;
+        let path = fs.path();
+        fs::write(path.join("same.txt"), "same")?;
+        fs::write(path.join("photo.png"), "not decoded by this test")?;
+        fs::write(path.join("changed.txt"), "before")?;
+        fs::create_dir(path.join("folder"))?;
+        fs::write(path.join("folder").join("child"), "")?;
+
+        let mut tab = new_tab(path);
+        rescan(&mut tab);
+        let mime_icon = handle_id(&item(&tab, "same.txt").icon_handle_grid);
+        let thumbnail = widget::image::Handle::from_path(path.join("photo.png"));
+        let thumbnail_icon = widget::icon::Handle {
+            symbolic: false,
+            data: widget::icon::Data::Image(thumbnail.clone()),
+        };
+        for item in tab.items_opt.as_mut().expect("tab should have items") {
+            item.thumbnail_opt = Some(if item.name == "photo.png" {
+                ItemThumbnail::Image(thumbnail.clone(), None)
+            } else {
+                ItemThumbnail::NotImage
+            });
+            item.icon_handle_grid = thumbnail_icon.clone();
+        }
+
+        fs::write(path.join("changed.txt"), "after, with more bytes")?;
+        rescan(&mut tab);
+        assert!(item(&tab, "same.txt").thumbnail_opt.is_some());
+        assert_eq!(
+            handle_id(&item(&tab, "same.txt").icon_handle_grid),
+            mime_icon
+        );
+        assert!(matches!(
+            item(&tab, "photo.png").thumbnail_opt,
+            Some(ItemThumbnail::Image(..))
+        ));
+        assert_eq!(
+            handle_id(&item(&tab, "photo.png").icon_handle_grid),
+            handle_id(&thumbnail_icon)
+        );
+        assert!(item(&tab, "folder").thumbnail_opt.is_some());
+        assert!(item(&tab, "changed.txt").thumbnail_opt.is_none());
+
+        let uncounted = |tab: &Tab| {
+            let (_, mut items) = tab.location.scan(IconSizes::default());
+            for item in &mut items {
+                if let ItemMetadata::Path { children_opt, .. } = &mut item.metadata {
+                    *children_opt = None;
+                }
+            }
+            items
+        };
+        assert_eq!(item(&tab, "folder").metadata.children_count(), Some(&1));
+        tab.set_items(uncounted(&tab));
+        assert_eq!(item(&tab, "folder").metadata.children_count(), Some(&1));
+        fs::write(path.join("folder").join("new child"), "")?;
+        tab.set_items(uncounted(&tab));
+        assert_eq!(item(&tab, "folder").metadata.children_count(), None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn going_back_shows_the_cached_listing() -> io::Result<()> {
+        let fs = simple_fs(NUM_FILES, NUM_HIDDEN, NUM_DIRS, NUM_NESTED, NAME_LEN)?;
+        let path = fs.path();
+        let child = filter_dirs(path)?.next().expect("there should be a folder");
+
+        let mut tab = new_tab(path);
+        rescan(&mut tab);
+        let parent_names: Vec<_> = tab
+            .items_opt
+            .iter()
+            .flatten()
+            .map(|item| item.name.clone())
+            .collect();
+
+        tab.update(
+            Message::Location(Location::Path(child.clone())),
+            Modifiers::empty(),
+        );
+        assert!(tab.items_opt.is_none());
+        rescan(&mut tab);
+
+        tab.update(Message::GoPrevious, Modifiers::empty());
+        let items = tab
+            .items_opt
+            .as_ref()
+            .expect("parent listing should be cached");
+        let names: Vec<_> = items.iter().map(|item| item.name.clone()).collect();
+        assert_eq!(names, parent_names);
+        let selected: Vec<_> = items
+            .iter()
+            .filter(|item| item.state.selected)
+            .filter_map(|item| item.path_opt())
+            .collect();
+        assert_eq!(selected, [&child]);
+
+        tab.update(Message::GoNext, Modifiers::empty());
+        assert!(tab.items_opt.is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn notify_events_reload_metadata_or_ask_for_rescan() -> io::Result<()> {
+        use notify_debouncer_full::DebouncedEvent;
+        use notify_debouncer_full::notify::event::{CreateKind, DataChange, ModifyKind};
+        use notify_debouncer_full::notify::{Event, EventKind};
+
+        let fs = empty_fs()?;
+        let path = fs.path();
+        let file = path.join("file");
+        fs::write(&file, "before")?;
+        let mut tab = new_tab(path);
+        rescan(&mut tab);
+
+        fs::write(&file, "after, with more bytes")?;
+        let modify = DebouncedEvent::new(
+            Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Any))).add_path(file.clone()),
+            std::time::Instant::now(),
+        );
+        assert!(!tab.apply_notify_events(&[modify]));
+        assert_eq!(
+            item(&tab, "file").metadata.file_size(),
+            Some("after, with more bytes".len() as u64)
+        );
+
+        let create = DebouncedEvent::new(
+            Event::new(EventKind::Create(CreateKind::File)).add_path(path.join("new")),
+            std::time::Instant::now(),
+        );
+        assert!(tab.apply_notify_events(&[create]));
+
         Ok(())
     }
 }

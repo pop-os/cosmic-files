@@ -509,6 +509,22 @@ impl Item {
         name.replace('.', ".\u{200B}").replace('_', "_\u{200B}")
     }
 
+    pub(crate) fn keep_loaded_from(&mut self, mut old: Self) {
+        if !self.metadata.same_state(&old.metadata) {
+            return;
+        }
+        if let Some(thumbnail) = old.thumbnail_opt.take() {
+            // Image thumbnails replaced the icons too
+            if matches!(thumbnail, ItemThumbnail::Image(..) | ItemThumbnail::Svg(..)) {
+                self.icon_handle_grid = old.icon_handle_grid;
+                self.icon_handle_list = old.icon_handle_list;
+                self.icon_handle_list_condensed = old.icon_handle_list_condensed;
+            }
+            self.thumbnail_opt = Some(thumbnail);
+        }
+        self.metadata.keep_children_count(&old.metadata);
+    }
+
     /// Text widget for a filename in grid/icon view: word-or-glyph wrapping, middle-ellipsized to 3 lines.
     pub fn grid_display_name<'a>(
         name: impl Into<Cow<'a, str>> + 'a,
