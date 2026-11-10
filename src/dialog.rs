@@ -41,6 +41,7 @@ use crate::key_bind::key_binds;
 use crate::localize::LANGUAGE_SORTER;
 use crate::location::{Location, SearchLocation};
 use crate::mounter::{MOUNTERS, MounterItem, MounterItems, MounterKey, MounterMessage};
+use crate::shortcuts::ShortcutsConfig;
 use crate::tab::{self, HeadingOptions, Tab};
 use crate::zoom::{zoom_in_view, zoom_out_view, zoom_to_default};
 use crate::{fl, home_dir, menu, mime_icon};
@@ -256,6 +257,7 @@ impl<M: Send + 'static> Dialog<M> {
         crate::localize::localize();
 
         let (config_handler, config) = Config::load();
+        let shortcuts_config = ShortcutsConfig::new(config.shortcuts_custom.clone());
         let (state_handler, state) = State::load();
 
         let mut settings = window::Settings {
@@ -291,6 +293,7 @@ impl<M: Send + 'static> Dialog<M> {
             window_id,
             config_handler,
             config,
+            shortcuts_config,
             state_handler,
             state,
         };
@@ -447,6 +450,7 @@ struct Flags {
     #[allow(dead_code)]
     config_handler: Option<cosmic_config::Config>,
     config: Config,
+    shortcuts_config: ShortcutsConfig,
     state_handler: Option<cosmic_config::Config>,
     state: State,
 }
@@ -1034,7 +1038,7 @@ impl Application for App {
         tab.mode = tab::Mode::Dialog(flags.kind.clone());
         (tab.sort_name, tab.sort_direction) = flags.state.dialog_sort_name;
 
-        let key_binds = key_binds(&tab.mode);
+        let key_binds = key_binds(&flags.shortcuts_config, &tab.mode);
 
         let mut app = Self {
             core,
