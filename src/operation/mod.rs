@@ -125,6 +125,19 @@ async fn copy_or_move(
                     let to = copy_unique_path(&from, to);
                     Some((from, to))
                 } else if let Some(name) = from.file_name() {
+                    // Trash storage names may have collision suffixes after the extension.
+                    // Recover the original name when copying or moving out of Trash.
+                    #[cfg(feature = "gvfs")]
+                    let original_path = if !crate::trash::is_trash_path(to) {
+                        crate::trash::original_path_for_trash_child(&from)
+                    } else {
+                        None
+                    };
+                    #[cfg(feature = "gvfs")]
+                    let name = original_path
+                        .as_ref()
+                        .and_then(|path| path.file_name())
+                        .unwrap_or(name);
                     let to = to.join(name);
                     Some((from, to))
                 } else {
