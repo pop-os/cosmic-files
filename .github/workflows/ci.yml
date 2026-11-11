@@ -8,15 +8,23 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_LOG: info
 
 jobs:
   test:
     name: cosmic-files - latest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: davidlattimore/wild-action@latest
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+            target
+          key: ${{ runner.os }}-cargo${{ hashFiles('**/Cargo.lock') }}
       - run: sudo apt-get update; sudo apt-get install libclang-dev libglib2.0-dev libxkbcommon-dev
-      - run: rustup update stable && rustup default stable
-      - run: cargo test --verbose --no-default-features
-      - run: cargo test --verbose
-      - run: cargo test --verbose --all-features
+      - run: cargo test --verbose --no-default-features -- --nocapture
+      - run: cargo test --verbose -- --nocapture
+      - run: cargo test --verbose --all-features -- --nocapture
