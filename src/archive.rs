@@ -1,5 +1,5 @@
 use crate::mime_icon::mime_for_path;
-use crate::operation::{Controller, OpReader, OperationError, OperationErrorType};
+use crate::operation::{Controller, OpReader, OperationError, OperationErrorType, SYNC_BATCH};
 use cosmic::iced::futures;
 use jiff::Zoned;
 use jiff::civil::DateTime;
@@ -45,7 +45,7 @@ pub fn extract(
     new_dir: &Path,
     password: &Option<String>,
     controller: &Controller,
-) -> Result<Vec<fs::File>, OperationError> {
+) -> Result<(), OperationError> {
     let mime = mime_for_path(path, None, false);
     let password = password.as_deref();
     match mime.essence_str() {
@@ -112,7 +112,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
     directory: P,
     password: Option<&str>,
     controller: Controller,
-) -> zip::result::ZipResult<Vec<std::fs::File>> {
+) -> zip::result::ZipResult<()> {
     use std::ffi::OsString;
     use std::fs;
     use zip::result::ZipError;
@@ -143,7 +143,7 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
 
     let mut buffer = vec![0; 4 * 1024 * 1024];
     let total_files = archive.len();
-    let mut dirty_fds = Vec::with_capacity(total_files);
+    let mut dirty_fds = Vec::with_capacity(SYNC_BATCH);
     let mut target_dirs = HashSet::new();
     #[cfg(unix)]
     let mut files_by_unix_mode = Vec::with_capacity(total_files);
@@ -170,7 +170,9 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
 
         let outpath = directory.as_ref().join(filepath);
 
-        if let Some(last_modified) = file.last_modified() {
+        if (file.is_dir() || file.is_symlink())
+            && let Some(last_modified) = file.last_modified()
+        {
             files_by_last_modified.push((outpath.clone(), last_modified));
         }
 
@@ -255,13 +257,21 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
             }
         }
 
-        // Check for real permissions, which we'll set in a second pass
         #[cfg(unix)]
         if let Some(mode) = file.unix_mode() {
-            files_by_unix_mode.push((outpath.clone(), mode));
+            use std::os::unix::fs::PermissionsExt;
+            outfile.set_permissions(fs::Permissions::from_mode(mode))?;
+        }
+        if let Some(modified) = file.last_modified().and_then(zip_date_time_to_system_time) {
+            outfile.set_modified(modified)?;
         }
 
         dirty_fds.push(outfile);
+        if dirty_fds.len() >= SYNC_BATCH {
+            for fd in dirty_fds.drain(..) {
+                fd.sync_all()?;
+            }
+        }
     }
     #[cfg(unix)]
     {
@@ -284,13 +294,14 @@ fn zip_extract<R: io::Read + io::Seek, P: AsRef<Path>>(
         }
     }
 
-    dirty_fds.reserve(target_dirs.len());
+    for fd in dirty_fds {
+        fd.sync_all()?;
+    }
     for dir in target_dirs {
-        let dir = fs::OpenOptions::new().read(true).open(dir)?;
-        dirty_fds.push(dir);
+        fs::File::open(dir)?.sync_all()?;
     }
 
-    Ok(dirty_fds)
+    Ok(())
 }
 
 fn zip_date_time_to_system_time(date_time: zip::DateTime) -> Option<SystemTime> {
