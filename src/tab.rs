@@ -2384,14 +2384,14 @@ impl Tab {
                         if item.location_opt.as_ref() == Some(&location) {
                             let handle_opt = match &thumbnail {
                                 ItemThumbnail::NotImage => None,
-                                ItemThumbnail::Image(handle, _) => Some(widget::icon::Handle {
-                                    symbolic: false,
-                                    data: widget::icon::Data::Image(handle.clone()),
-                                }),
-                                ItemThumbnail::Svg(handle) => Some(widget::icon::Handle {
-                                    symbolic: false,
-                                    data: widget::icon::Data::Svg(handle.clone()),
-                                }),
+                                ItemThumbnail::Image(handle, _) => Some(widget::icon::Handle::new(
+                                    false,
+                                    widget::icon::Data::Image(handle.clone()),
+                                )),
+                                ItemThumbnail::Svg(handle) => Some(widget::icon::Handle::new(
+                                    false,
+                                    widget::icon::Data::Svg(handle.clone()),
+                                )),
                                 //TODO: text thumbnails?
                                 ItemThumbnail::Text(_text) => None,
                             };
