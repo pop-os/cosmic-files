@@ -17,7 +17,7 @@ use std::error::Error;
 use std::fs;
 use std::future::Future;
 use std::ops::ControlFlow;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Instant;
@@ -35,11 +35,26 @@ pub enum GioCopyError {
     GLib(#[from] glib::Error),
 }
 
+#[cfg(unix)]
+fn same_device(from: &Path, to: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (fs::symlink_metadata(from), to.parent().map(fs::metadata)) {
+        (Ok(from), Some(Ok(to))) => from.dev() == to.dev(),
+        _ => true,
+    }
+}
+
+#[cfg(not(unix))]
+fn same_device(_from: &Path, _to: &Path) -> bool {
+    true
+}
+
 #[cfg(feature = "gvfs")]
 fn is_gvfs_fuse_path(path: &std::path::Path) -> bool {
     dirs::runtime_dir().is_some_and(|dir| path.starts_with(dir.join("gvfs")))
 }
 
+#[derive(Clone, Copy)]
 pub enum Method {
     Copy,
     Move { cross_device_copy: bool },
@@ -135,6 +150,13 @@ impl Context {
                 // Skip matching source and destination
                 continue;
             }
+
+            let method = match method {
+                Method::Move {
+                    cross_device_copy: true,
+                } if !same_device(&from_parent, &to_parent) => Method::Copy,
+                method => method,
+            };
 
             for entry in WalkDir::new(&from_parent).follow_root_links(false) {
                 self.controller
