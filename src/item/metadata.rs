@@ -75,4 +75,56 @@ impl ItemMetadata {
             _ => None,
         }
     }
+
+    pub(super) fn same_state(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Path { metadata, .. },
+                Self::Path {
+                    metadata: other, ..
+                },
+            ) => {
+                metadata.file_type() == other.file_type()
+                    && metadata.len() == other.len()
+                    && metadata.modified().ok() == other.modified().ok()
+            }
+            #[cfg(feature = "gvfs")]
+            (
+                Self::GvfsPath {
+                    mtime,
+                    size_opt,
+                    is_dir,
+                    ..
+                },
+                Self::GvfsPath {
+                    mtime: other_mtime,
+                    size_opt: other_size_opt,
+                    is_dir: other_is_dir,
+                    ..
+                },
+            ) => mtime == other_mtime && size_opt == other_size_opt && is_dir == other_is_dir,
+            _ => false,
+        }
+    }
+
+    pub(super) fn keep_children_count(&mut self, old: &Self) {
+        match (self, old) {
+            (
+                Self::Path { children_opt, .. },
+                Self::Path {
+                    children_opt: old_children_opt,
+                    ..
+                },
+            ) if children_opt.is_none() => *children_opt = *old_children_opt,
+            #[cfg(feature = "gvfs")]
+            (
+                Self::GvfsPath { children_opt, .. },
+                Self::GvfsPath {
+                    children_opt: old_children_opt,
+                    ..
+                },
+            ) if children_opt.is_none() => *children_opt = *old_children_opt,
+            _ => {}
+        }
+    }
 }

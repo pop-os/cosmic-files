@@ -4,6 +4,7 @@ use mime_guess::mime;
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::Path;
+use std::time::{Duration, Instant};
 use tempfile::NamedTempFile;
 
 use crate::format_size;
@@ -37,6 +38,27 @@ impl Clone for ItemThumbnail {
                 Self::Text(widget::text_editor::Content::with_text(&content.text()))
             }
         }
+    }
+}
+
+const EXTERNAL_THUMBNAILER_TIMEOUT: Duration = Duration::from_secs(30);
+
+fn run_with_timeout(
+    command: &mut std::process::Command,
+    timeout: Duration,
+) -> std::io::Result<Option<std::process::ExitStatus>> {
+    let mut child = command.spawn()?;
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(Some(status));
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Ok(None);
+        }
+        std::thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -323,8 +345,15 @@ impl ItemThumbnail {
             let Some(mut command) = thumbnailer.command(path, file.path(), thumbnail_size) else {
                 continue;
             };
-            match command.status() {
-                Ok(status) => {
+            match run_with_timeout(&mut command, EXTERNAL_THUMBNAILER_TIMEOUT) {
+                Ok(None) => {
+                    log::warn!(
+                        "{thumbnailer:?} for {} did not finish in {:?}, killed it",
+                        path.display(),
+                        EXTERNAL_THUMBNAILER_TIMEOUT
+                    );
+                }
+                Ok(Some(status)) => {
                     if status.success() {
                         match image::ImageReader::open(file.path())
                             .and_then(ImageReader::with_guessed_format)
@@ -371,5 +400,26 @@ impl ItemThumbnail {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::process::Command;
+    use std::time::{Duration, Instant};
+
+    use super::run_with_timeout;
+
+    #[test]
+    fn run_with_timeout_kills_stuck_commands() -> std::io::Result<()> {
+        let status = run_with_timeout(&mut Command::new("true"), Duration::from_secs(10))?;
+        assert!(status.is_some_and(|status| status.success()));
+
+        let start = Instant::now();
+        let status = run_with_timeout(Command::new("sleep").arg("10"), Duration::from_millis(100))?;
+        assert!(status.is_none());
+        assert!(start.elapsed() < Duration::from_secs(5));
+
+        Ok(())
     }
 }
