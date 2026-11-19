@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use super::{Controller, OperationSelection, ReplaceResult, copy_unique_path};
-use crate::operation::{OperationError, sync_to_disk};
+use crate::operation::{OperationError, SYNC_BATCH, sync_to_disk};
 use anyhow::Context as AnyhowContext;
 use compio::BufResult;
 use compio::buf::{IntoInner, IoBuf};
@@ -266,6 +266,9 @@ impl Context {
 
             if let Some(file) = sync_file {
                 dirty_fds.push((file, op.to.clone()));
+                if dirty_fds.len() >= SYNC_BATCH {
+                    self.flush(std::mem::take(&mut dirty_fds)).await?;
+                }
             }
 
             match flow {
@@ -290,25 +293,34 @@ impl Context {
         dirty_fds: &mut Vec<(compio::fs::File, PathBuf)>,
         dirty_dirs: &mut HashSet<PathBuf>,
     ) -> Result<(), OperationError> {
-        for path in dirty_dirs.drain() {
-            let dir = compio::fs::OpenOptions::new()
-                .read(true)
-                .open(&path)
-                .await
-                .map_err(|err| {
-                    OperationError::from_err(
-                        format!(
-                            "failed to open parent directory to sync {}: {}",
-                            path.display(),
-                            err
-                        ),
-                        &self.controller,
-                    )
-                })?;
-            dirty_fds.push((dir, path));
+        self.flush(std::mem::take(dirty_fds)).await?;
+        let dirs: Vec<_> = dirty_dirs.drain().collect();
+        for chunk in dirs.chunks(SYNC_BATCH) {
+            let mut fds = Vec::with_capacity(chunk.len());
+            for path in chunk {
+                let dir = compio::fs::OpenOptions::new()
+                    .read(true)
+                    .open(path)
+                    .await
+                    .map_err(|err| {
+                        OperationError::from_err(
+                            format!(
+                                "failed to open parent directory to sync {}: {}",
+                                path.display(),
+                                err
+                            ),
+                            &self.controller,
+                        )
+                    })?;
+                fds.push((dir, path.clone()));
+            }
+            self.flush(fds).await?;
         }
+        Ok(())
+    }
 
-        sync_to_disk(std::mem::take(dirty_fds))
+    async fn flush(&self, fds: Vec<(compio::fs::File, PathBuf)>) -> Result<(), OperationError> {
+        sync_to_disk(fds)
             .await
             .map_err(|e| OperationError::from_err(e, &self.controller))
     }
