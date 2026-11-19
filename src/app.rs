@@ -168,6 +168,8 @@ pub enum Action {
     OpenItemLocation,
     OpenTerminal,
     OpenWith,
+    /// Open the selection with the n-th app of the "Open with" submenu.
+    OpenWithApp(usize),
     RunContextAction(usize),
     Paste,
     PermanentlyDelete,
@@ -243,6 +245,7 @@ impl Action {
             Self::OpenItemLocation => Message::OpenItemLocation(entity_opt),
             Self::OpenTerminal => Message::OpenTerminal(entity_opt),
             Self::OpenWith => Message::OpenWithDialog(entity_opt),
+            Self::OpenWithApp(index) => Message::OpenWithApp(entity_opt, *index),
             Self::RunContextAction(action) => {
                 Message::TabMessage(entity_opt, tab::Message::RunContextAction(*action))
             }
@@ -392,9 +395,11 @@ pub enum Message {
     OpenInNewWindow(Option<Entity>),
     OpenItemLocation(Option<Entity>),
     OpenWithBrowse,
+    OpenWithApp(Option<Entity>, usize),
     OpenWithDialog(Option<Entity>),
     OpenWithSelection(usize),
     OpenWithSearchClear,
+    SaveOpenWithUsage,
     #[cfg(all(feature = "wayland", feature = "desktop-applet"))]
     Overlap(window::Id, OverlapNotifyEvent),
     Paste(Option<Entity>),
@@ -562,7 +567,7 @@ pub enum DialogPage {
         paths: Box<[PathBuf]>,
     },
     OpenWith {
-        path: PathBuf,
+        paths: Vec<PathBuf>,
         mime: mime_guess::Mime,
         selected: usize,
         store_opt: Option<Arc<MimeApp>>,
@@ -736,6 +741,7 @@ pub struct App {
     modifiers: Modifiers,
     mounter_items: FxHashMap<MounterKey, MounterItems>,
     must_save_sort_names: bool,
+    must_save_open_with_usage: bool,
     network_drive_connecting: Option<(MounterKey, String)>,
     network_drive_input: String,
     #[cfg(feature = "notify")]
@@ -933,6 +939,122 @@ impl App {
                 }
             }
         }
+    }
+
+    /// The selected files in `tab` and their shared type, for the "Open with" submenu. `None`
+    /// if nothing is selected, or the selection includes a folder or files of different types.
+    fn open_with_target(tab: &Tab) -> Option<(Vec<PathBuf>, Mime)> {
+        let mut paths = Vec::new();
+        let mut mime_opt: Option<&Mime> = None;
+        for item in tab.items_opt()?.iter().filter(|item| item.state.selected) {
+            if item.metadata.is_dir() {
+                return None;
+            }
+            match mime_opt {
+                Some(mime) if mime.essence_str() != item.mime.essence_str() => return None,
+                Some(_) => {}
+                None => mime_opt = Some(&item.mime),
+            }
+            paths.push(item.path_opt()?.clone());
+        }
+        Some((paths, mime_opt?.clone()))
+    }
+
+    /// Apps offered directly in the "Open with" submenu for `mime`, best first: the default
+    /// app, then up to five more, ordered by how often each was chosen for this file type and
+    /// then by the order the system lists them.
+    fn open_with_apps(&self, mime: &Mime) -> Vec<Arc<MimeApp>> {
+        const OPEN_WITH_SUGGESTIONS: usize = 5;
+        let usage = self.state.open_with_usage.get(mime.essence_str());
+        let mut apps: Vec<(usize, &Arc<MimeApp>)> = self
+            .mime_app_cache
+            .get_apps_for_mime(mime, false)
+            .into_iter()
+            .map(|(app, _)| app)
+            .enumerate()
+            .collect();
+        apps.sort_by_key(|(order, app)| {
+            (
+                std::cmp::Reverse(app.is_default(mime)),
+                std::cmp::Reverse(
+                    usage
+                        .and_then(|counts| counts.get(&app.id))
+                        .copied()
+                        .unwrap_or(0),
+                ),
+                *order,
+            )
+        });
+        // The default (sorted first) doesn't take one of the suggestion slots.
+        let has_default = apps.first().is_some_and(|(_, app)| app.is_default(mime));
+        apps.into_iter()
+            .take(OPEN_WITH_SUGGESTIONS + usize::from(has_default))
+            .map(|(_, app)| app.clone())
+            .collect()
+    }
+
+    /// What the context menu needs to show the "Open with" submenu for `tab`'s selection.
+    fn open_with_choices(&self, tab: &Tab) -> Vec<crate::menu::OpenWithChoice> {
+        Self::open_with_target(tab)
+            .map(|(_, mime)| {
+                self.open_with_apps(&mime)
+                    .iter()
+                    .map(|app| crate::menu::OpenWithChoice {
+                        name: app.name.clone(),
+                        icon: app.icon(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Opens `paths` with `app` (one launch, or one per file for apps that take a single
+    /// file), adding them to Recents. Returns whether anything launched.
+    fn open_paths_with(&self, paths: &[PathBuf], app: &MimeApp) -> bool {
+        let Some(commands) = app.command(paths) else {
+            log::warn!(
+                "failed to open {:?} with {:?}: failed to get command",
+                paths,
+                app.id
+            );
+            return false;
+        };
+        let mut launched = false;
+        for mut command in commands {
+            match spawn_detached(&mut command) {
+                Ok(()) => launched = true,
+                Err(err) => log::warn!("failed to open {:?} with {:?}: {}", paths, app.id, err),
+            }
+        }
+        if launched && self.config.show_recents {
+            for path in paths {
+                let _ = recently_used_xbel::update_recently_used(
+                    path,
+                    Self::APP_ID.to_string(),
+                    "cosmic-files".to_string(),
+                    None,
+                );
+            }
+        }
+        launched
+    }
+
+    /// Counts a deliberate "open with" choice, saving shortly after (batched).
+    fn record_open_with(&mut self, mime: &Mime, app_id: &str) -> Task<Message> {
+        let counts = self
+            .state
+            .open_with_usage
+            .entry(mime.essence_str().to_string())
+            .or_default();
+        *counts.entry(app_id.to_string()).or_default() += 1;
+        if self.must_save_open_with_usage {
+            return Task::none();
+        }
+        self.must_save_open_with_usage = true;
+        cosmic::Task::future(async move {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            cosmic::action::app(Message::SaveOpenWithUsage)
+        })
     }
 
     fn launch_from_mime_cache<P>(&self, mime: &Mime, paths: &[P]) -> bool
@@ -2405,6 +2527,7 @@ impl Application for App {
             modifiers: Modifiers::empty(),
             mounter_items: FxHashMap::default(),
             must_save_sort_names: false,
+            must_save_open_with_usage: false,
             network_drive_connecting: None,
             network_drive_input: String::new(),
             #[cfg(feature = "notify")]
@@ -3174,7 +3297,7 @@ impl Application for App {
                             context_action::run(&self.config.context_actions, action, &paths);
                         }
                         DialogPage::OpenWith {
-                            path,
+                            paths,
                             mime,
                             selected,
                             search_app_name,
@@ -3189,37 +3312,11 @@ impl Application for App {
                                     .contains(search_app_name.to_lowercase().as_str().trim())
                             });
 
-                            if let Some((app, _)) = available_apps.get(selected) {
-                                if let Some(mut command) =
-                                    app.command(&[&path]).and_then(|v| v.into_iter().next())
-                                {
-                                    match spawn_detached(&mut command) {
-                                        Ok(()) => {
-                                            if self.config.show_recents {
-                                                let _ = recently_used_xbel::update_recently_used(
-                                                    &path,
-                                                    Self::APP_ID.to_string(),
-                                                    "cosmic-files".to_string(),
-                                                    None,
-                                                );
-                                            }
-                                        }
-                                        Err(err) => {
-                                            log::warn!(
-                                                "failed to open {} with {:?}: {}",
-                                                path.display(),
-                                                app.id,
-                                                err
-                                            );
-                                        }
-                                    }
-                                } else {
-                                    log::warn!(
-                                        "failed to open {} with {:?}: failed to get command",
-                                        path.display(),
-                                        app.id
-                                    );
-                                }
+                            let launched = available_apps.get(selected).map(|(app, _)| {
+                                (app.id.clone(), self.open_paths_with(&paths, app))
+                            });
+                            if let Some((app_id, true)) = launched {
+                                tasks.push(self.record_open_with(&mime, &app_id));
                             }
                         }
                         DialogPage::PermanentlyDelete { paths } => {
@@ -3821,18 +3918,22 @@ impl Application for App {
                 if let Some(tab) = self.tab_model.data::<Tab>(entity)
                     && let Some(items) = tab.items_opt()
                 {
-                    for item in items {
-                        if !item.state.selected {
-                            continue;
-                        }
-                        let Some(path) = item.path_opt() else {
-                            continue;
-                        };
+                    // Several files of one type open together; anything else (a folder,
+                    // mixed types) falls back to the first selected item.
+                    let target = Self::open_with_target(tab).or_else(|| {
+                        items
+                            .iter()
+                            .find(|item| item.state.selected)
+                            .and_then(|item| {
+                                Some((vec![item.path_opt()?.clone()], item.mime.clone()))
+                            })
+                    });
+                    if let Some((paths, mime)) = target {
                         return Task::batch([
                             self.push_dialog(
                                 DialogPage::OpenWith {
-                                    path: path.clone(),
-                                    mime: item.mime.clone(),
+                                    paths,
+                                    mime,
                                     selected: 0,
                                     store_opt: "x-scheme-handler/mime"
                                         .parse::<mime_guess::Mime>()
@@ -3852,6 +3953,30 @@ impl Application for App {
             Message::OpenWithSelection(index) => {
                 if let Some(DialogPage::OpenWith { selected, .. }) = self.dialog_pages.front_mut() {
                     *selected = index;
+                }
+            }
+            Message::OpenWithApp(entity_opt, index) => {
+                let entity = entity_opt.unwrap_or_else(|| self.tab_model.active());
+                if let Some((paths, mime)) = self
+                    .tab_model
+                    .data::<Tab>(entity)
+                    .and_then(Self::open_with_target)
+                    && let Some(app) = self.open_with_apps(&mime).get(index).cloned()
+                    && self.open_paths_with(&paths, &app)
+                {
+                    return self.record_open_with(&mime, &app.id);
+                }
+            }
+            Message::SaveOpenWithUsage => {
+                self.must_save_open_with_usage = false;
+                if let Some(state_handler) = self.state_handler.as_ref()
+                    && let Err(err) = state_handler
+                        .set::<&FxOrderMap<String, FxOrderMap<String, u32>>>(
+                            "open_with_usage",
+                            &self.state.open_with_usage,
+                        )
+                {
+                    log::warn!("Failed to save open with usage: {err:?}");
                 }
             }
             Message::OpenWithSearchClear => {
@@ -5024,7 +5149,7 @@ impl Application for App {
                             Ok(item) => {
                                 return self.push_dialog(
                                     DialogPage::OpenWith {
-                                        path,
+                                        paths: vec![path],
                                         mime: item.mime,
                                         selected: 0,
                                         store_opt: "x-scheme-handler/mime"
@@ -5895,16 +6020,20 @@ impl Application for App {
                     )
             }
             DialogPage::OpenWith {
-                path,
+                paths,
                 mime,
                 selected,
                 store_opt,
                 search_app_name,
                 ..
             } => {
-                let name = match path.file_name() {
-                    Some(file_name) => file_name.to_str(),
-                    None => path.as_os_str().to_str(),
+                let name = match paths.as_slice() {
+                    [path] => path
+                        .file_name()
+                        .unwrap_or(path.as_os_str())
+                        .to_string_lossy()
+                        .into_owned(),
+                    _ => fl!("selected-items", items = paths.len()),
                 };
 
                 let mut column = widget::list_column();
@@ -5987,7 +6116,7 @@ impl Application for App {
                         .on_clear(Message::OpenWithSearchClear)
                         .on_input(move |search_app_name| {
                             Message::DialogUpdate(DialogPage::OpenWith {
-                                path: path.clone(),
+                                paths: paths.clone(),
                                 mime: mime.clone(),
                                 selected: *selected,
                                 store_opt: store_opt.clone(),
@@ -6500,6 +6629,7 @@ impl Application for App {
                     &self.modifiers,
                     self.clipboard_has_content(),
                     &self.config.context_actions,
+                    self.open_with_choices(tab),
                 )
                 .map(move |message| Message::TabMessage(Some(entity), message));
             tab_column = tab_column.push(tab_view);
@@ -6530,6 +6660,7 @@ impl Application for App {
                                 &window.modifiers,
                                 self.clipboard_has_content(),
                                 &self.config.context_actions,
+                                self.open_with_choices(tab),
                             )
                             .map(move |message| Message::TabMessage(Some(*entity), message)),
                         None => widget::space::vertical().into(),

@@ -152,6 +152,9 @@ pub enum TypeToSearch {
 pub struct State {
     pub sort_names: FxOrderMap<String, (HeadingOptions, bool)>,
     pub dialog_sort_name: (HeadingOptions, bool),
+    /// How often each app was chosen to open each file type, which orders the "Open with"
+    /// submenu. Keyed by MIME type (without parameters), then desktop entry ID.
+    pub open_with_usage: FxOrderMap<String, FxOrderMap<String, u32>>,
 }
 
 impl Default for State {
@@ -164,6 +167,7 @@ impl Default for State {
                 )
             })),
             dialog_sort_name: (HeadingOptions::Modified, false),
+            open_with_usage: FxOrderMap::default(),
         }
     }
 }

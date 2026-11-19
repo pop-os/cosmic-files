@@ -4116,6 +4116,7 @@ impl Tab {
         size: Size,
         clipboard_paste_available: bool,
         context_actions: &'a [ContextActionPreset],
+        open_with: Vec<crate::menu::OpenWithChoice>,
     ) -> Element<'a, Message> {
         // Update cached size
         self.size_opt.set(Some(size));
@@ -4219,6 +4220,7 @@ impl Tab {
                 modifiers,
                 clipboard_paste_available,
                 context_actions,
+                &open_with,
             )),
         )
         .item_width(cosmic::widget::menu::ItemWidth::Uniform(360))
@@ -4594,6 +4596,7 @@ impl Tab {
         modifiers: &'a Modifiers,
         clipboard_paste_available: bool,
         context_actions: &'a [ContextActionPreset],
+        open_with: Vec<crate::menu::OpenWithChoice>,
     ) -> Element<'a, Message> {
         widget::responsive(move |size| {
             widget::id_container(
@@ -4603,6 +4606,7 @@ impl Tab {
                     size,
                     clipboard_paste_available,
                     context_actions,
+                    open_with.clone(),
                 ),
                 Id::new(format!(
                     "tab-{}-{}",

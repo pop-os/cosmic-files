@@ -35,6 +35,13 @@ const fn menu_button_optional(
     }
 }
 
+/// An app offered directly in the context menu's "Open with" submenu.
+#[derive(Clone)]
+pub struct OpenWithChoice {
+    pub name: String,
+    pub icon: widget::icon::Handle,
+}
+
 /// A menu action dispatched to the tab the menu was opened on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TabAction(pub Action);
@@ -53,6 +60,7 @@ pub fn context_menu(
     modifiers: &Modifiers,
     clipboard_paste_available: bool,
     context_actions: &[ContextActionPreset],
+    open_with: &[OpenWithChoice],
 ) -> Vec<menu::Tree<tab::Message>> {
     let menu_item =
         |label: String, action: Action| menu::Item::Button(label, None, TabAction(action));
@@ -182,8 +190,28 @@ pub fn context_menu(
                 if selected_dir == 1 && selected == 1 || selected_dir == 0 {
                     children.push(menu_item(fl!("open"), Action::Open));
                 }
+                // Windows-style flyout: the likeliest apps one click away, then the full
+                // picker for everything else. Several files work too, if they share a type.
+                if !open_with.is_empty() {
+                    let mut apps: Vec<menu::Item<TabAction, String>> = open_with
+                        .iter()
+                        .enumerate()
+                        .map(|(i, choice)| {
+                            menu::Item::Button(
+                                choice.name.clone(),
+                                Some(choice.icon.clone()),
+                                TabAction(Action::OpenWithApp(i)),
+                            )
+                        })
+                        .collect();
+                    apps.push(menu::Item::Divider);
+                    apps.push(menu_item(fl!("open-with-other"), Action::OpenWith));
+                    children.push(menu::Item::Folder(fl!("open-with"), apps));
+                }
                 if selected == 1 {
-                    children.push(menu_item(fl!("menu-open-with"), Action::OpenWith));
+                    if open_with.is_empty() {
+                        children.push(menu_item(fl!("menu-open-with"), Action::OpenWith));
+                    }
                     if selected_dir == 1 {
                         children.push(menu_item(fl!("open-in-terminal"), Action::OpenTerminal));
                     }
