@@ -704,6 +704,12 @@ pub fn menu_bar<'a>(
                             selected_gallery > 0,
                         ),
                         menu::Item::Divider,
+                        menu::Item::Button(
+                            fl!("menu-keyboard-shortcuts"),
+                            None,
+                            Action::KeyboardShortcuts,
+                        ),
+                        menu::Item::Divider,
                         menu::Item::Button(fl!("menu-settings"), None, Action::Settings),
                         menu::Item::Divider,
                         menu::Item::Button(fl!("menu-about"), None, Action::About),

@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::FxOrderMap;
 use crate::app::App;
 use crate::location::Location;
+use crate::shortcuts::Shortcuts;
 use crate::tab::{HeadingOptions, View};
 
 pub use crate::context_action::{ContextActionPreset, ContextActionSelection};
@@ -211,6 +212,7 @@ pub struct Config {
     pub show_recents: bool,
     pub tab: TabConfig,
     pub type_to_search: TypeToSearch,
+    pub shortcuts_custom: Shortcuts,
 }
 
 impl Config {
@@ -275,6 +277,7 @@ impl Default for Config {
             show_recents: true,
             tab: TabConfig::default(),
             type_to_search: TypeToSearch::Recursive,
+            shortcuts_custom: Shortcuts::default(),
         }
     }
 }
