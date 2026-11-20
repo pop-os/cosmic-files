@@ -82,6 +82,7 @@ pub fn context_menu(
     let mut selected_trash_only = false;
     let mut selected_desktop_entry = None;
     let mut selected_types: Vec<Mime> = vec![];
+    let mut selected_names: Vec<&str> = vec![];
     let mut selected_mount_point = 0;
     let mut any_trash_item = false;
     if let Some(items) = tab.items_opt() {
@@ -108,6 +109,7 @@ pub fn context_menu(
                     any_trash_item = true;
                 }
                 selected_types.push(item.mime.clone());
+                selected_names.push(&item.name);
             }
         }
     }
@@ -118,7 +120,7 @@ pub fn context_menu(
         context_actions
             .iter()
             .enumerate()
-            .filter(|(_, action)| action.matches_selection(selected, selected_dir))
+            .filter(|(_, action)| action.matches_selection(selected, selected_dir, &selected_names))
             .map(|(i, action)| menu_item(action.name.clone(), Action::RunContextAction(i)))
             .collect::<Vec<_>>()
     };
