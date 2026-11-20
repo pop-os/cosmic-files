@@ -60,7 +60,7 @@ other-apps = Bernameyên din
 set-permissions = Maf hatine sazkirin ji bo "{ $name }" bo { $mode }
 quit = Biqedîne
 sort-by-size = Li gorî mezinahiyê rêz bike
-rename = Navê biguhêrîne...
+rename = Navî biguhêrîne...
 empty-folder-hidden = Peldanka vala (tiştên veşartî tê de hene)
 keep = Bihêle
 operations-running =
@@ -319,7 +319,7 @@ permanently-deleted =
        *[other] hêman
     }
 write-execute = Nivîsandin û xebitandin
-renaming = Navê ji "{ $from }" biguhêrîne bo "{ $to }"
+renaming = Navî ji "{ $from }" biguhêrîne bo "{ $to }"
 set-executable-and-launch-description = Tu dixwazî "{ $name }" wekî pelê xebitandinê saz bikî û bixebtînî?
 replace = Biguhêrîne
 replace-title = "{ $filename }" jixwe di vê cihê de heye
