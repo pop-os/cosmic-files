@@ -214,6 +214,24 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn new_network_favorite(&self, location: &Location) -> Option<Favorite> {
+        let Location::Network(uri, name, Some(path)) = location else {
+            return None;
+        };
+        if self
+            .favorites
+            .iter()
+            .any(|favorite| favorite.path_opt().as_ref() == Some(path))
+        {
+            return None;
+        }
+        Some(Favorite::Network {
+            uri: uri.clone(),
+            name: name.clone(),
+            path: path.clone(),
+        })
+    }
+
     pub fn load() -> (Option<cosmic_config::Config>, Self) {
         match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
             Ok(config_handler) => {
@@ -429,6 +447,91 @@ pub struct TimeConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_network_favorite_preserves_location() {
+        let config = Config::default();
+        let location = Location::Network(
+            "smb://server/shared%20files/".to_string(),
+            "Shared files on server".to_string(),
+            Some(PathBuf::from("/run/mount/shared files")),
+        );
+        assert_eq!(
+            config.new_network_favorite(&location),
+            Some(Favorite::Network {
+                uri: "smb://server/shared%20files/".to_string(),
+                name: "Shared files on server".to_string(),
+                path: PathBuf::from("/run/mount/shared files"),
+            })
+        );
+    }
+
+    #[test]
+    fn new_network_favorite_rejects_any_favorite_with_same_path() {
+        let location = Location::Network(
+            "smb://server/share/".to_string(),
+            "share on server".to_string(),
+            Some(PathBuf::from("/run/mount/share")),
+        );
+        let mut config = Config::default();
+        for existing in [
+            Favorite::Network {
+                uri: "smb://server/share/".to_string(),
+                name: "Backup".to_string(),
+                path: PathBuf::from("/run/mount/share"),
+            },
+            Favorite::Path(PathBuf::from("/run/mount/share")),
+            Favorite::Named {
+                path: PathBuf::from("/run/mount/share"),
+                name: "Backup".to_string(),
+            },
+        ] {
+            config.favorites = vec![existing];
+            assert_eq!(
+                config.new_network_favorite(&location),
+                None,
+                "{:?}",
+                config.favorites
+            );
+        }
+    }
+
+    #[test]
+    fn new_network_favorite_allows_share_with_bookmarked_subfolder() {
+        let location = Location::Network(
+            "smb://server/share/".to_string(),
+            "share on server".to_string(),
+            Some(PathBuf::from("/run/mount/share")),
+        );
+        let mut config = Config::default();
+        config.favorites.push(Favorite::Network {
+            uri: "smb://server/share/subfolder/".to_string(),
+            name: "subfolder".to_string(),
+            path: PathBuf::from("/run/mount/share/subfolder"),
+        });
+        assert_eq!(
+            config.new_network_favorite(&location),
+            Some(Favorite::Network {
+                uri: "smb://server/share/".to_string(),
+                name: "share on server".to_string(),
+                path: PathBuf::from("/run/mount/share"),
+            })
+        );
+    }
+
+    #[test]
+    fn new_network_favorite_rejects_local_and_unmounted_locations() {
+        let config = Config::default();
+        for location in [
+            Location::Path(PathBuf::from("/tmp")),
+            Location::Recents,
+            Location::Trash,
+            Location::Network("network:///".to_string(), "Networks".to_string(), None),
+            Location::Network("smb://server/share/".to_string(), "share".to_string(), None),
+        ] {
+            assert_eq!(config.new_network_favorite(&location), None, "{location:?}");
+        }
+    }
 
     #[test]
     fn favorite_with_label_converts_path_to_named() {
