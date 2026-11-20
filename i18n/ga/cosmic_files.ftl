@@ -354,7 +354,7 @@ quit = Scoir
 
 ## Edit
 
-edit = Eagar
+edit = Cuir in eagar
 cut = Gearr
 copy = Cóipeáil
 paste = Greamaigh
