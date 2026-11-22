@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 log.workspace = true
-zbus = "6"
+zbus = { version = "6", features = ["tokio-multithread"] }
 
 [dependencies.cosmic-files]
 path = ".."

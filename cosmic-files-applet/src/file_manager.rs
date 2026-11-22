@@ -13,7 +13,8 @@ impl FileManager {
         match process::Command::new("cosmic-files").args(uris).spawn() {
             Ok(mut child) => {
                 log::info!("spawned cosmic-files with id {:?}", child.id());
-                match child.wait() {
+                // clean up off-thread so the dbus reply isn't held until the window closes.
+                std::thread::spawn(move || match child.wait() {
                     Ok(status) => {
                         if status.success() {
                             log::info!("cosmic-files exited with {status}");
@@ -24,7 +25,7 @@ impl FileManager {
                     Err(err) => {
                         log::warn!("failed to run cosmic-files: {err}");
                     }
-                }
+                });
             }
             Err(err) => {
                 log::warn!("failed to spawn cosmic-files: {err}");

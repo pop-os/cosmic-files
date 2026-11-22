@@ -217,6 +217,8 @@ async fn copy_or_move(
     .map_err(wrap_compio_spawn_error)?
 }
 
+pub const SYNC_BATCH: usize = 64;
+
 /// Sync file descriptor wrappers to disk.
 pub async fn sync_to_disk(fds: Vec<(compio::fs::File, PathBuf)>) -> Result<(), SyncError> {
     // Sync files and dirs to disk.
@@ -970,7 +972,6 @@ impl Operation {
                         let controller = controller_clone;
                         let total_paths = paths.len();
                         let mut op_sel = OperationSelection::default();
-                        let mut dirty_fds = Vec::new();
                         for (i, path) in paths.iter().enumerate() {
                             futures::executor::block_on(async {
                                 controller
@@ -994,22 +995,8 @@ impl Operation {
                                 op_sel.ignored.push(path.clone());
                                 op_sel.selected.push(new_dir.clone());
 
-                                let fds = crate::archive::extract(
-                                    path,
-                                    &new_dir,
-                                    &password,
-                                    &controller,
-                                )?;
-                                dirty_fds.extend(fds);
+                                crate::archive::extract(path, &new_dir, &password, &controller)?;
                             }
-                        }
-
-                        // Batch sync file descriptors
-                        for fd in dirty_fds {
-                            // Drop would close the File and likely won't fail due to fsyncing here.
-                            // TIL there's no File::close; should be okay though.
-                            fd.sync_all()
-                                .map_err(|e| OperationError::from_err(e, &controller))?;
                         }
 
                         Ok::<_, OperationError>(op_sel)
