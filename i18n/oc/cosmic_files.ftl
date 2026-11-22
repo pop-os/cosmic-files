@@ -33,5 +33,5 @@ domain = Domeni
 password = Senhal
 open-file = Dobrir lo fichièr
 open-folder = Dobrir lo dossièr
-edit = Edicion
+edit = Modificar
 select-all = O seleccionar tot
