@@ -371,7 +371,7 @@ quit = Quitter
 
 ## Edit
 
-edit = Édition
+edit = Modifier
 cut = Couper
 copy = Copier
 paste = Coller

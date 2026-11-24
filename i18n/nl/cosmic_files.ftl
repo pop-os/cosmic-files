@@ -169,10 +169,10 @@ read-write-execute = Lezen, schrijven en uitvoeren
 
 favorite-path-error = Fout bij het openen van de map
 favorite-path-error-description =
-    Kon de map '{ $path }' niet openen.
-    De map bestaat mogelijk niet of u heeft geen toestemming om die te openen.
+    Kon de map “{ $path }” niet openen.
+    “{ $path }” bestaat mogelijk niet of u heeft geen toestemming om die te openen.
 
-    Wilt u de map uit de favorieten verwijderen?
+    Wilt u haar uit de favorieten verwijderen?
 remove = Verwijderen
 keep = Behouden
 
@@ -191,7 +191,7 @@ connecting = Verbinding maken…
 domain = Domein
 enter-server-address = Serveradres invoeren
 network-drive-description =
-    Serveradressen bestaan uit protocolvoorvoegsel en netwerkadres.
+    Serveradressen bestaan uit een protocolvoorvoegsel en een adres.
     Voorbeelden: ssh://192.168.0.1, ftp://[2001:db8::1]
 
 ### Make sure to keep the comma which separates the columns
@@ -214,7 +214,7 @@ username = Gebruikersnaam
 
 cancelled = Geannuleerd
 edit-history = Geschiedenis bewerken
-history = Geschiedenis
+history = Geschiedenis…
 no-history = Geen items in de geschiedenis.
 pending = In afwachting
 progress = { $percent }%
@@ -226,78 +226,78 @@ compressing =
     { $items }  { $items ->
         [one] bestand
        *[other] bestanden
-    } van '{ $from }' naar '{ $to }' comprimeren ({ $progress })...
+    } van “{ $from }” naar “{ $to }” comprimeren ({ $progress })…
 compressed =
     { $items }  { $items ->
         [one] bestand
        *[other] bestanden
-    } gecomprimeerd van '{ $from }' naar '{ $to }'
+    } gecomprimeerd van “{ $from }” naar “{ $to }”
 copy_noun = Kopie
-creating = '{ $name }' in '{ $parent }' aanmaken
-created = '{ $name }' in '{ $parent }' aangemaakt
+creating = “{ $name }” in “{ $parent }” aanmaken
+created = “{ $name }” in “{ $parent }” aangemaakt
 copying =
     { $items } { $items ->
         [one] bestand
        *[other] bestanden
-    } van '{ $from }' naar '{ $to }' kopiëren ({ $progress })...
+    } van “{ $from }” naar “{ $to }” kopiëren ({ $progress })…
 copied =
     { $items } { $items ->
         [one] bestand
        *[other] bestanden
-    } gekopieerd van '{ $from }' naar '{ $to }'
+    } gekopieerd van “{ $from }” naar “{ $to }”
 deleting =
     { $items } { $items ->
         [one] bestand
        *[other] bestanden
-    } uit { trash } verwijderen ({ $progress })...
+    } uit { trash } verwijderen ({ $progress })…
 deleted =
     { $items } { $items ->
         [one] bestand
        *[other] bestanden
-    } verwijderd uit { trash }
-emptying-trash = { trash } recyclen ({ $progress })...
+    } uit { trash } verwijderd
+emptying-trash = { trash } recyclen ({ $progress })…
 emptied-trash = { trash } gerecycled
 extracting =
     { $items } { $items ->
         [one] bestand
        *[other] bestanden
-    } van '{ $from }' naar '{ $to }' uitpakken ({ $progress })...
+    } van “{ $from }” naar “{ $to }” uitpakken ({ $progress })…
 extracted =
     { $items } { $items ->
         [one] bestand
        *[other] bestanden
-    } uitgepakt van '{ $from }' naar '{ $to }'
-setting-executable-and-launching = '{ $name }' uitvoerbaar maken en starten
-set-executable-and-launched = '{ $name }' uitvoerbaar gemaakt en gestart
-setting-permissions = Rechten voor '{ $name }' wijzigen in '{ $mode }'
-set-permissions = Rechten voor '{ $name }' gewijzigd in '{ $mode }'
+    } uitgepakt van “{ $from }” naar “{ $to }”
+setting-executable-and-launching = “{ $name }” uitvoerbaar maken en starten
+set-executable-and-launched = “{ $name }” uitvoerbaar gemaakt en gestart
+setting-permissions = Rechten voor “{ $name }” wijzigen in “{ $mode }”
+set-permissions = Rechten voor “{ $name }” gewijzigd in “{ $mode }”
 moving =
     { $items } { $items ->
         [one] bestand
        *[other] bestanden
-    } van '{ $from }' naar '{ $to }' verplaatsen ({ $progress })...
+    } van “{ $from }” naar “{ $to }” verplaatsen ({ $progress })…
 moved =
     { $items } { $items ->
         [one] bestand
        *[other] bestanden
-    } verplaatst van '{ $from }' naar '{ $to }'
+    } verplaatst van “{ $from }” naar “{ $to }”
 permanently-deleting =
     { $items } { $items ->
         [one] bestand
        *[other] bestanden
-    } premanent verwijderen
+    } permanent verwijderen
 permanently-deleted =
     { $items } { $items ->
         [one] bestand
        *[other] bestanden
     } permanent verwijderd
-renaming = '{ $from }' als '{ $to }' hernoemen
-renamed = '{ $from }' als '{ $to }' hernoemd
+renaming = “{ $from }” als “{ $to }” hernoemen
+renamed = “{ $from }” als “{ $to }” hernoemd
 restoring =
     { $items } { $items ->
         [one] bestand
        *[other] bestanden
-    } uit { trash } terugzetten ({ $progress })...
+    } uit { trash } terugzetten ({ $progress })…
 restored =
     { $items } { $items ->
         [one] bestand
@@ -312,9 +312,9 @@ default-app = { $name } (standaard)
 
 ## Show details
 
-show-details = Details weergeven
+show-details = Details weergeven…
 type = Type: { $mime }
-items = Bestanden: { $items }
+items = Items: { $items }
 item-size = Grootte: { $size }
 item-created = Aangemaakt op: { $created }
 item-modified = Bewerkt op: { $modified }
@@ -330,7 +330,7 @@ single-click = Een keer klikken om te openen
 
 appearance = Uiterlijk
 theme = Thema
-match-desktop = Systeemstandaard
+match-desktop = Aan desktop aanpassen
 dark = Donker
 light = Licht
 
@@ -340,8 +340,8 @@ type-to-search = Typ om te zoeken
 type-to-search-recursive = In deze map en alle onderliggende mappen zoeken
 type-to-search-enter-path = Naar de bestandslocatie of -naam zoeken
 # Context menu
-add-to-sidebar = Favoriet aan zijbalk toevoegen
-compress = Comprimeren
+add-to-sidebar = Aan zijbalk toevoegen
+compress = Comprimeren…
 delete-permanently = Permanent verwijderen
 extract-here = Uitpakken
 new-file = Nieuw bestand…
@@ -433,3 +433,18 @@ copy-to = Kopiëren naar…
 move-to = Verplaatsen naar…
 keywords = Bestand;Map;Document;Verkenner
 move-to-title = Verplaatsbestemming aanwijzen
+context-action = Contextactie
+context-action-confirm-title = “{ $name }” uitvoeren?
+context-action-confirm-warning =
+    Deze wordt op { $items } { $items ->
+        [one] item
+       *[other] items
+    } uitgevoerd.
+run = Uitvoeren
+rename-confirm = Hernoemen
+mixed = Gemixt
+search-application = Zoeken op appnaam
+checksum = { $kind } controlegetal
+calculate = Berekenen
+error = Fout
+copy-path = Bestandspad kopiëren
