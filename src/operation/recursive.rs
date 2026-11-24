@@ -40,6 +40,7 @@ fn is_gvfs_fuse_path(path: &std::path::Path) -> bool {
     dirs::runtime_dir().is_some_and(|dir| path.starts_with(dir.join("gvfs")))
 }
 
+#[derive(Clone, Copy)]
 pub enum Method {
     Copy,
     Move { cross_device_copy: bool },
@@ -118,14 +119,13 @@ impl Context {
 
     pub async fn recursive_copy_or_move(
         &mut self,
-        from_to_pairs: impl IntoIterator<Item = (PathBuf, PathBuf)>,
-        method: Method,
+        from_to_pairs: impl IntoIterator<Item = (PathBuf, PathBuf, Method)>,
     ) -> Result<OpFlow, OperationError> {
         let mut ops = Vec::new();
         let mut cleanup_ops = Vec::new();
         let mut dirty_fds = Vec::new();
         let mut dirty_dirs = HashSet::new();
-        for (from_parent, to_parent) in from_to_pairs {
+        for (from_parent, to_parent, method) in from_to_pairs {
             self.controller
                 .check()
                 .await

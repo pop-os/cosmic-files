@@ -136,18 +136,29 @@ async fn copy_or_move(
         // Attempt quick and simple renames
         //TODO: allow rename to be used for directories in recursive context?
 
-        let from_to_pairs: Vec<(PathBuf, PathBuf)> = if matches!(method, Method::Move { .. }) {
+        let from_to_pairs: Vec<_> = if let Method::Move { cross_device_copy } = method {
             from_to_pairs_iter
                 .map(|(from, to)| async move {
                     //TODO: show replace dialog here?
                     if to.exists() {
-                        return Some((from, to));
+                        return Some((from, to, method));
                     }
 
                     match compio::fs::rename(&from, &to).await {
                         Ok(()) => {
                             log::info!("renamed {} to {}", from.display(), to.display());
                             None
+                        }
+                        Err(err)
+                            if cross_device_copy && err.raw_os_error() == Some(libc::EXDEV) =>
+                        {
+                            log::info!(
+                                "failed to rename {} to {}, fallback to recursive copy: {}",
+                                from.display(),
+                                to.display(),
+                                err
+                            );
+                            Some((from, to, Method::Copy))
                         }
                         Err(err) => {
                             log::info!(
@@ -156,7 +167,7 @@ async fn copy_or_move(
                                 to.display(),
                                 err
                             );
-                            Some((from, to))
+                            Some((from, to, method))
                         }
                     }
                 })
@@ -169,7 +180,9 @@ async fn copy_or_move(
                 })
                 .await
         } else {
-            from_to_pairs_iter.collect()
+            from_to_pairs_iter
+                .map(|(from, to)| (from, to, method))
+                .collect()
         };
 
         let mut context = Context::new(controller.clone());
@@ -207,9 +220,7 @@ async fn copy_or_move(
             });
         }
 
-        context
-            .recursive_copy_or_move(from_to_pairs, method)
-            .await?;
+        context.recursive_copy_or_move(from_to_pairs).await?;
 
         Result::<OperationSelection, OperationError>::Ok(context.op_sel)
     })

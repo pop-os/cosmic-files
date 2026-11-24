@@ -34,18 +34,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
         });
 
     context
-        .recursive_copy_or_move(
-            vec![(PathBuf::from("test/a"), PathBuf::from("test/b"))],
+        .recursive_copy_or_move(vec![(
+            PathBuf::from("test/a"),
+            PathBuf::from("test/b"),
             Method::Copy,
-        )
+        )])
         .await?;
     context
-        .recursive_copy_or_move(
-            vec![(PathBuf::from("test/b"), PathBuf::from("test/c"))],
+        .recursive_copy_or_move(vec![(
+            PathBuf::from("test/b"),
+            PathBuf::from("test/c"),
             Method::Move {
                 cross_device_copy: false,
             },
-        )
+        )])
         .await?;
 
     Ok(())
