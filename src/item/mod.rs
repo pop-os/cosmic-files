@@ -1,7 +1,7 @@
 #[cfg(feature = "desktop")]
 use cosmic::desktop::fde::{DesktopEntry, get_languages_from_env};
 use cosmic::iced::advanced::text;
-use cosmic::iced::{Alignment, ContentFit, Length};
+use cosmic::iced::{Alignment, ContentFit, Length, Rectangle};
 use cosmic::{Element, cosmic_theme, theme, widget};
 use mime_guess::{Mime, mime};
 use rustc_hash::FxHashMap;
@@ -16,7 +16,7 @@ use crate::location::Location;
 use crate::mime_icon::{mime_for_path, mime_icon};
 use crate::operation::Controller;
 use crate::tab::{
-    MODE_NAMES, MODE_SHIFT_GROUP, MODE_SHIFT_OTHER, MODE_SHIFT_USER, Message, THUMBNAIL_SIZE,
+    MODE_NAMES, MODE_SHIFT_GROUP, MODE_SHIFT_OTHER, MODE_SHIFT_USER, Message, THUMBNAIL_SIZE, View,
     get_mode_part, set_mode_part, text_editor_class,
 };
 use crate::trash::{TrashItem, TrashItemSize, item_from_trash_entry};
@@ -507,6 +507,18 @@ impl Item {
     pub(crate) fn display_name(name: &str) -> String {
         // In order to wrap at periods and underscores, add a zero width space after each one
         name.replace('.', ".\u{200B}").replace('_', "_\u{200B}")
+    }
+
+    pub(crate) fn drag_overlap(&self, drag_rect: &Rectangle, view: View) -> bool {
+        if matches!(view, View::Grid)
+            && let Some(bounds) = self.state.grid_bounds
+        {
+            return bounds.intersects(drag_rect);
+        }
+        self.state
+            .rect_opt
+            .get()
+            .is_some_and(|r| r.intersects(drag_rect))
     }
 
     /// Text widget for a filename in grid/icon view: word-or-glyph wrapping, middle-ellipsized to 3 lines.

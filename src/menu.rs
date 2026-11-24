@@ -139,7 +139,7 @@ pub fn context_menu(
     match (&tab.mode, &tab.location) {
         (
             tab::Mode::App | tab::Mode::Desktop,
-            Location::Desktop(..)
+            Location::Desktop { .. }
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)
@@ -306,10 +306,25 @@ pub fn context_menu(
 
                 children.push(menu::Item::Divider);
                 // TODO: Nested menu
-                children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
-                children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
-                children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
-                if matches!(tab.location, Location::Desktop(..)) {
+                if let Location::Desktop { .. } = &tab.location {
+                    children.push(menu_item(
+                        fl!("arrange-by-name"),
+                        Action::SetSort(HeadingOptions::Name, true),
+                    ));
+                    children.push(menu_item(
+                        fl!("arrange-by-modified"),
+                        Action::SetSort(HeadingOptions::Modified, true),
+                    ));
+                    children.push(menu_item(
+                        fl!("arrange-by-size"),
+                        Action::SetSort(HeadingOptions::Size, true),
+                    ));
+                } else {
+                    children.push(sort_item(fl!("sort-by-name"), HeadingOptions::Name));
+                    children.push(sort_item(fl!("sort-by-modified"), HeadingOptions::Modified));
+                    children.push(sort_item(fl!("sort-by-size"), HeadingOptions::Size));
+                }
+                if matches!(tab.location, Location::Desktop { .. }) {
                     children.push(menu::Item::Divider);
                     children.push(menu_item(
                         fl!("desktop-view-options"),
@@ -320,7 +335,7 @@ pub fn context_menu(
         }
         (
             tab::Mode::Dialog(dialog_kind),
-            Location::Desktop(..)
+            Location::Desktop { .. }
             | Location::Path(..)
             | Location::Search(SearchLocation::Path(..), ..)
             | Location::Search(SearchLocation::Recents, ..)

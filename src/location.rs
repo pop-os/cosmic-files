@@ -1,8 +1,10 @@
 use std::path::{self, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 use std::{fmt, fs};
 
-use crate::config::{DesktopConfig, IconSizes};
+use crate::config::IconSizes;
+use crate::desktop::{DesktopLayout, DesktopPos};
 use crate::fl;
 use crate::item::{Item, folder_name, item_from_path};
 use crate::mounter::MOUNTERS;
@@ -76,7 +78,12 @@ impl From<Location> for EditLocation {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Location {
-    Desktop(PathBuf, String, DesktopConfig),
+    Desktop {
+        path: PathBuf,
+        display: String,
+        layout: Arc<DesktopLayout>,
+        pos_opt: Option<DesktopPos>,
+    },
     Network(String, String, Option<PathBuf>),
     Path(PathBuf),
     Recents,
@@ -87,7 +94,7 @@ pub enum Location {
 impl std::fmt::Display for Location {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Desktop(path, display, ..) => {
+            Self::Desktop { path, display, .. } => {
                 write!(f, "{} on display {display}", path.display())
             }
             Self::Network(uri, ..) => write!(f, "{uri}"),
@@ -142,7 +149,7 @@ impl Location {
 
     pub const fn path_opt(&self) -> Option<&PathBuf> {
         match self {
-            Self::Desktop(path, ..) => Some(path),
+            Self::Desktop { path, .. } => Some(path),
             Self::Path(path) => Some(path),
             Self::Search(SearchLocation::Path(path), ..) => Some(path),
             Self::Network(_, _, path) => path.as_ref(),
@@ -152,7 +159,7 @@ impl Location {
 
     pub(crate) fn into_path_opt(self) -> Option<PathBuf> {
         match self {
-            Self::Desktop(path, ..) => Some(path),
+            Self::Desktop { path, .. } => Some(path),
             Self::Path(path) => Some(path),
             Self::Search(SearchLocation::Path(path), ..) => Some(path),
             Self::Network(_, _, path) => path,
@@ -163,9 +170,17 @@ impl Location {
     pub fn with_path(&self, path: PathBuf) -> Self {
         let path = Self::expand_tilde(path);
         match self {
-            Self::Desktop(_, display, desktop_config) => {
-                Self::Desktop(path, display.clone(), *desktop_config)
-            }
+            Self::Desktop {
+                path: _,
+                display,
+                layout,
+                pos_opt,
+            } => Self::Desktop {
+                path,
+                display: display.clone(),
+                layout: layout.clone(),
+                pos_opt: pos_opt.clone(),
+            },
             Self::Path(..) => Self::Path(path),
             Self::Search(SearchLocation::Path(_), term, show_hidden, time) => Self::Search(
                 SearchLocation::Path(path),
@@ -188,9 +203,12 @@ impl Location {
 
     pub fn scan(&self, sizes: IconSizes) -> (Option<Box<Item>>, Vec<Item>) {
         let items = match self {
-            Self::Desktop(path, display, desktop_config) => {
-                scan_desktop(path, display, *desktop_config, sizes)
-            }
+            Self::Desktop {
+                path,
+                display,
+                layout,
+                ..
+            } => scan_desktop(path, display, layout, sizes),
             Self::Path(path) => scan_path(path, sizes),
             Self::Search(..) => {
                 // Search is done incrementally
@@ -216,7 +234,7 @@ impl Location {
 
     pub fn title(&self) -> String {
         match self {
-            Self::Desktop(path, _, _) => {
+            Self::Desktop { path, .. } => {
                 let (name, _) = folder_name(path);
                 name
             }
@@ -278,7 +296,7 @@ impl Location {
     pub fn supports_paste(&self) -> bool {
         matches!(
             self,
-            Self::Desktop(..)
+            Self::Desktop { .. }
                 | Self::Path(..)
                 | Self::Search(..)
                 | Self::Recents

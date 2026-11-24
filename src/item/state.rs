@@ -13,6 +13,7 @@ pub struct ItemState {
     pub overlaps_drag_rect: bool,
     pub pos_opt: Cell<Option<(usize, usize)>>,
     pub rect_opt: Cell<Option<Rectangle>>,
+    pub grid_bounds: Option<Rectangle>,
     pub selected: bool,
 }
 
@@ -26,6 +27,7 @@ impl Default for ItemState {
             overlaps_drag_rect: false,
             pos_opt: Cell::new(None),
             rect_opt: Cell::new(None),
+            grid_bounds: None,
             selected: false,
         }
     }
