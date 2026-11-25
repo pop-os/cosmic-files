@@ -49,3 +49,17 @@ This document provides a regression testing checklist for COSMIC Files. The chec
 
 - [ ] Desktop icons display as expected
 - [ ] Drag-and-drop into Firefox works
+
+### Network share sidebar bookmarks
+
+- [ ] Connect to an SMB share. Right-click its sidebar row -> Add to sidebar saves the share root with its displayed name.
+- [ ] Repeat with a child folder selected, multiple items selected, and another tab active. The clicked sidebar share is always bookmarked.
+- [ ] The saved share appears once in the sidebar and retains its disconnect control.
+- [ ] Change sidebar label, then reconnect the share. The label is preserved and no duplicate bookmark appears.
+- [ ] Bookmarking a subfolder does not prevent saving its share root separately.
+- [ ] Disconnect the saved share. Its bookmark remains, and clicking it reconnects to the share root.
+- [ ] Restart Files with the share unmounted. Its bookmark remains and reconnects when clicked.
+- [ ] Remove from sidebar removes the bookmark without disconnecting the share. The mounted share row remains and can be pinned again.
+- [ ] Cancel authentication for an unmounted saved share. Files remains usable and does not reopen the prompt.
+- [ ] Ctrl+D and File -> Add to sidebar still bookmark selected items.
+- [ ] With two Files windows open, bookmarks and labels stay in sync. File dialogs use the same saved label.

@@ -310,6 +310,7 @@ pub enum PreviewKind {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum NavMenuAction {
+    AddToSidebar(segmented_button::Entity),
     ClearRecents,
     EmptyTrash,
     Open(segmented_button::Entity),
@@ -1718,6 +1719,41 @@ impl App {
         }
     }
 
+    fn with_mounter_item(
+        mut b: segmented_button::BuilderEntity<segmented_button::SingleSelect>,
+        key: MounterKey,
+        item: &MounterItem,
+    ) -> segmented_button::BuilderEntity<segmented_button::SingleSelect> {
+        b = b.data(MounterData(key, item.clone()));
+        if let Some(icon) = item.icon(true) {
+            b = b.icon(icon::icon(icon).size(16));
+        }
+        if item.is_mounted() {
+            b = b.closable();
+        }
+        b
+    }
+
+    fn take_remote_item<'a>(
+        items: &mut Vec<(MounterKey, &'a MounterItem)>,
+        path: &Path,
+    ) -> Option<(MounterKey, &'a MounterItem)> {
+        items
+            .iter()
+            .position(|(_, item)| item.is_remote() && item.path().as_deref() == Some(path))
+            .map(|i| items.remove(i))
+    }
+
+    fn sorted_mounter_items(&self) -> Vec<(MounterKey, &MounterItem)> {
+        let mut items: Vec<_> = self
+            .mounter_items
+            .iter()
+            .flat_map(|(key, items)| items.iter().map(move |item| (*key, item)))
+            .collect();
+        items.sort_by(|a, b| LANGUAGE_SORTER.compare(&a.1.name(), &b.1.name()));
+        items
+    }
+
     fn update_nav_model(&mut self) {
         let mut nav_model = segmented_button::ModelBuilder::default();
 
@@ -1729,11 +1765,19 @@ impl App {
             });
         }
 
+        let mut nav_items = self.sorted_mounter_items();
+
         for (favorite_i, favorite) in self.config.favorites.iter().enumerate() {
             if let Some(path) = favorite.path_opt() {
+                let mounter_item = if matches!(favorite, Favorite::Network { .. }) {
+                    Self::take_remote_item(&mut nav_items, &path)
+                } else {
+                    None
+                };
                 let name = favorite.display_name().unwrap_or_else(|| fl!("filesystem"));
                 nav_model = nav_model.insert(move |b| {
-                    b.text(name.clone())
+                    let mut b = b
+                        .text(name.clone())
                         .icon(
                             icon::icon(if path.is_dir() {
                                 folder_icon_symbolic(&path, 16)
@@ -1748,7 +1792,11 @@ impl App {
                             }
                             _ => Location::Path(path.clone()),
                         })
-                        .data(FavoriteIndex(favorite_i))
+                        .data(FavoriteIndex(favorite_i));
+                    if let Some((key, item)) = mounter_item {
+                        b = Self::with_mounter_item(b, key, item);
+                    }
+                    b
                 });
             }
         }
@@ -1777,17 +1825,10 @@ impl App {
             });
         }
 
-        // Collect all mounter items
-        let mut nav_items = Vec::new();
-        for (key, items) in &self.mounter_items {
-            nav_items.extend(items.iter().map(|item| (*key, item)));
-        }
-        // Sort by name lexically
-        nav_items.sort_by(|a, b| LANGUAGE_SORTER.compare(&a.1.name(), &b.1.name()));
         // Add items to nav model
         for (i, (key, item)) in nav_items.into_iter().enumerate() {
             nav_model = nav_model.insert(|mut b| {
-                b = b.text(item.name()).data(MounterData(key, item.clone()));
+                b = Self::with_mounter_item(b.text(item.name()), key, item);
                 let uri = item.uri();
                 if let Some(path) = item.path() {
                     if item.is_remote() {
@@ -1797,12 +1838,6 @@ impl App {
                     }
                 } else if !uri.is_empty() {
                     b = b.data(Location::Network(uri, item.name(), None));
-                }
-                if let Some(icon) = item.icon(true) {
-                    b = b.icon(icon::icon(icon).size(16));
-                }
-                if item.is_mounted() {
-                    b = b.closable();
                 }
                 if i == 0 {
                     b = b.divider_above();
@@ -2594,6 +2629,15 @@ impl Application for App {
                     fl!("remove-from-sidebar"),
                     None,
                     NavMenuAction::RemoveFromSidebar(entity),
+                ));
+            } else if location_opt
+                .and_then(|location| self.config.new_network_favorite(location))
+                .is_some()
+            {
+                items.push(cosmic::widget::menu::Item::Button(
+                    fl!("add-to-sidebar"),
+                    None,
+                    NavMenuAction::AddToSidebar(entity),
                 ));
             }
 
@@ -4993,6 +5037,18 @@ impl Application for App {
                 }
             }
             Message::NavMenuAction(action) => match action {
+                NavMenuAction::AddToSidebar(entity) => {
+                    if let Some(favorite) = self
+                        .nav_model
+                        .data::<Location>(entity)
+                        .and_then(|location| self.config.new_network_favorite(location))
+                    {
+                        let mut favorites = self.config.favorites.clone();
+                        favorites.push(favorite);
+                        config_set!(favorites, favorites);
+                        return self.update_config();
+                    }
+                }
                 NavMenuAction::ClearRecents => match recently_used_xbel::clear_recently_used() {
                     Ok(()) => {}
                     Err(err) => {
