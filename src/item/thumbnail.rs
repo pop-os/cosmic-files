@@ -6,6 +6,7 @@ use std::io::Read;
 use std::path::Path;
 use tempfile::NamedTempFile;
 
+use crate::appimage;
 use crate::format_size;
 use crate::item::ItemMetadata;
 use crate::large_image::{exceeds_memory_limit, should_use_tiling};
@@ -68,7 +69,8 @@ impl ItemThumbnail {
                     );
                 }
                 CachedThumbnail::Failed => {
-                    if mime.type_() != mime::IMAGE {
+                    // AppImages are not the image type but are supported here.
+                    if mime.type_() != mime::IMAGE && !appimage::is_appimage(&mime) {
                         return Self::NotImage;
                     }
                 }
@@ -194,6 +196,51 @@ impl ItemThumbnail {
                         ),
                         Some((img_width, img_height)),
                     );
+                }
+            }
+        }
+
+        // Try AppImage embedded icons.
+        if appimage::is_appimage(&mime) && check_size("appimage", max_size_mb * 1000 * 1000) {
+            tried_supported_file = true;
+            match appimage::extract_icon(path) {
+                Some(icon) => {
+                    if let Some(dyn_img) = image::load_from_memory(&icon).ok() {
+                        let (img_width, img_height) = (dyn_img.width(), dyn_img.height());
+                        if img_width > 0 && img_height > 0 {
+                            if let Ok(cacher) = thumbnail_cacher.as_ref() {
+                                match cacher.update_with_image(dyn_img) {
+                                    Ok(thumb_path) => {
+                                        return Self::Image(
+                                            widget::image::Handle::from_path(thumb_path),
+                                            Some((img_width, img_height)),
+                                        );
+                                    }
+                                    Err(err) => {
+                                        log::warn!(
+                                            "cacher failed to write AppImage icon for {}: {err}",
+                                            path.display()
+                                        );
+                                    }
+                                }
+                            } else {
+                                let thumb = dyn_img.into_rgba8();
+                                return Self::Image(
+                                    widget::image::Handle::from_rgba(
+                                        thumb.width(),
+                                        thumb.height(),
+                                        thumb.into_raw(),
+                                    ),
+                                    Some((img_width, img_height)),
+                                );
+                            }
+                        }
+                    } else if appimage::looks_like_svg(&icon) {
+                        return Self::Svg(widget::svg::Handle::from_memory(icon));
+                    }
+                }
+                None => {
+                    log::debug!("no embedded icon found in AppImage {}", path.display());
                 }
             }
         }

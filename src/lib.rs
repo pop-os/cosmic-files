@@ -14,6 +14,7 @@ use crate::config::{Config, State};
 use crate::location::Location;
 
 pub mod app;
+pub mod appimage;
 mod archive;
 pub mod channel;
 pub mod clipboard;
