@@ -53,16 +53,16 @@ pub trait TrashExt {
         .size(icon_size)
         .handle()
     }
+}
 
-    fn icon_symbolic(icon_size: u16) -> widget::icon::Handle {
-        widget::icon::from_name(if Self::is_empty() {
-            "user-trash-symbolic"
-        } else {
-            "user-trash-full-symbolic"
-        })
-        .size(icon_size)
-        .handle()
-    }
+pub fn trash_icon_symbolic(is_empty: bool, icon_size: u16) -> widget::icon::Handle {
+    widget::icon::from_name(if is_empty {
+        "user-trash-symbolic"
+    } else {
+        "user-trash-full-symbolic"
+    })
+    .size(icon_size)
+    .handle()
 }
 
 fn is_trash_root(root: &Path) -> bool {
