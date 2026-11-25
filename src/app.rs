@@ -4763,9 +4763,10 @@ impl Application for App {
                             for path in &*recently_trashed {
                                 for item in &items {
                                     if let ItemMetadata::Trash { ref entry, .. } = item.metadata
-                                        && &entry.original_path == path {
-                                            paths.push(entry.clone());
-                                        }
+                                        && &entry.original_path == path
+                                    {
+                                        paths.push(entry.clone());
+                                    }
                                 }
                             }
                         }
@@ -6981,6 +6982,11 @@ impl Application for App {
 // Ideally, tests would use the cap-std crate which limits path traversal.
 #[cfg(test)]
 pub(crate) mod test_utils {
+    #[cfg(unix)]
+    pub(crate) mod fuse {
+        pub(crate) use super::fuse_utils::*;
+    }
+
     use std::cmp::Ordering;
     use std::fs::File;
     use std::io::{self, Write};
@@ -7005,23 +7011,27 @@ pub(crate) mod test_utils {
     /// Add `n` temporary files in `dir`
     ///
     /// Each file is assigned a numeric name from [0, n) with a prefix.
-    pub fn file_flat_hier<D: AsRef<Path>>(dir: D, n: usize, prefix: &str) -> io::Result<Vec<File>> {
+    pub fn file_flat_hier<D: AsRef<Path>>(
+        dir: D,
+        n: usize,
+        prefix: &str,
+    ) -> io::Result<Vec<(File, PathBuf)>> {
         let dir = dir.as_ref();
         (0..n)
-            .map(|i| -> io::Result<File> {
+            .map(|i| -> io::Result<(File, PathBuf)> {
                 let name = format!("{prefix}{i}");
                 let path = dir.join(&name);
 
-                let mut file = File::create(path)?;
+                let mut file = File::create(&path)?;
                 file.write_all(name.as_bytes())?;
 
-                Ok(file)
+                Ok((file, path))
             })
             .collect()
     }
 
     // Random alphanumeric String of length `len`
-    fn rand_string(len: usize) -> String {
+    pub fn rand_string(len: usize) -> String {
         let mut rng = fastrand::Rng::new();
         iter::repeat_with(|| rng.alphanumeric()).take(len).collect()
     }
@@ -7245,5 +7255,278 @@ pub(crate) mod test_utils {
             path.display(),
             tab_path.display()
         );
+    }
+}
+
+#[cfg(all(test, unix))]
+mod fuse_utils {
+    use std::{
+        collections::BTreeMap,
+        ffi::{OsStr, OsString},
+        fs::File,
+        io::{self, BufRead, BufReader},
+        sync::{LazyLock, Mutex},
+        time::{Duration, SystemTime},
+    };
+
+    use fuser::{
+        BackgroundSession, Config, Errno, FileAttr, FileHandle, FileType, Filesystem, FopenFlags,
+        Generation, INodeNo, LockOwner, MountOption, OpenFlags, ReplyAttr, ReplyCreate,
+        ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyWrite, Request, SessionACL, WriteFlags,
+    };
+    use tempfile::TempDir;
+
+    pub const DIE_ON_CREATE: u32 = 0x01;
+    pub const DIE_ON_FSYNC: u32 = 0x02;
+    pub const DIE_ON_WRITE: u32 = 0x04;
+    pub const DIE_ON_LOOKUP: u32 = 0x08;
+    pub const DIE_ON_READDIR: u32 = 0x10;
+
+    const BLOCK_SIZE: u32 = 4096;
+    const TTL: Duration = Duration::from_secs(1);
+
+    static ROOT_DOT: LazyLock<(FileAttr, &OsStr)> = LazyLock::new(|| {
+        (
+            attr(INodeNo::ROOT, 0, FileType::Directory, 0o755),
+            OsStr::new("."),
+        )
+    });
+    static ROOT_DOTDOT: LazyLock<(FileAttr, &OsStr)> = LazyLock::new(|| {
+        (
+            attr(INodeNo::ROOT, 0, FileType::Directory, 0o755),
+            OsStr::new(".."),
+        )
+    });
+
+    /// FUSE file system to test various failure conditions.
+    pub struct BadFs {
+        ino_next: Mutex<INodeNo>,
+        flags: u32,
+        nodes: Mutex<BTreeMap<INodeNo, FileAttr>>,
+        by_name: Mutex<BTreeMap<OsString, INodeNo>>,
+    }
+
+    impl BadFs {
+        pub fn new(flags: u32) -> Self {
+            let mut ino = INodeNo::ROOT;
+            ino.0 += 1;
+            Self {
+                ino_next: Mutex::new(ino),
+                flags,
+                nodes: Mutex::new(BTreeMap::new()),
+                by_name: Mutex::new(BTreeMap::new()),
+            }
+        }
+
+        pub fn mount(self) -> io::Result<(BackgroundSession, TempDir)> {
+            let dir = TempDir::new()?;
+            let mut config = Config::default();
+            let mut mount_options = Vec::with_capacity(6);
+            mount_options.extend_from_slice(&[
+                MountOption::NoAtime,
+                MountOption::NoDev,
+                MountOption::NoExec,
+                MountOption::NoSuid,
+                MountOption::RW,
+            ]);
+            config.mount_options = mount_options;
+
+            // Even if AutoUnmount is disabled, fuser might still unmount it on drop.
+            if Self::allow_other_enabled().unwrap_or_default() {
+                config.acl = SessionACL::All;
+                config.mount_options.push(MountOption::AutoUnmount);
+            }
+
+            fuser::spawn_mount(self, dir.path(), &config).map(|fs| (fs, dir))
+        }
+
+        fn allow_other_enabled() -> io::Result<bool> {
+            let conf = File::open("/etc/fuse.conf")?;
+            for line in BufReader::new(conf).lines() {
+                let line = line?;
+                if line.trim() == "user_allow_other" {
+                    return Ok(true);
+                }
+            }
+
+            Ok(false)
+        }
+
+        fn next_ino(&self) -> INodeNo {
+            let mut ino = self.ino_next.lock().unwrap();
+            ino.0 += 1;
+            *ino
+        }
+
+        fn insert_new_node(
+            &self,
+            name: &OsStr,
+            mode: u16,
+            file_type: FileType,
+        ) -> (INodeNo, FileAttr) {
+            let ino = self.next_ino();
+            let attr = attr(ino, 0, file_type, mode);
+            self.nodes.lock().unwrap().insert(ino, attr);
+            self.by_name.lock().unwrap().insert(name.to_owned(), ino);
+
+            (ino, attr)
+        }
+    }
+
+    impl Filesystem for BadFs {
+        fn getattr(&self, _req: &Request, ino: INodeNo, _fh: Option<FileHandle>, reply: ReplyAttr) {
+            if ino == INodeNo::ROOT {
+                reply.attr(&TTL, &ROOT_DOT.0);
+            } else if let Some(attr) = self.nodes.lock().unwrap().get(&ino) {
+                reply.attr(&TTL, attr);
+            } else {
+                reply.error(Errno::ENOENT);
+            }
+        }
+
+        fn create(
+            &self,
+            _req: &Request,
+            parent: INodeNo,
+            name: &OsStr,
+            mode: u32,
+            _umask: u32,
+            _flags: i32,
+            reply: ReplyCreate,
+        ) {
+            if self.flags & DIE_ON_CREATE == DIE_ON_CREATE {
+                reply.error(Errno::EOWNERDEAD);
+                return;
+            }
+            if parent != INodeNo::ROOT {
+                reply.error(Errno::ENOENT);
+                return;
+            }
+
+            let (ino, attr) = self.insert_new_node(name, mode as _, FileType::RegularFile);
+
+            reply.created(
+                &Duration::ZERO,
+                &attr,
+                Generation(0),
+                FileHandle(ino.0),
+                FopenFlags::empty(),
+            );
+        }
+
+        fn readdir(
+            &self,
+            _req: &Request,
+            ino: INodeNo,
+            _fh: FileHandle,
+            offset: u64,
+            mut reply: ReplyDirectory,
+        ) {
+            if ino != INodeNo::ROOT {
+                reply.error(Errno::ENOENT);
+                return;
+            }
+            let names = self.by_name.lock().unwrap();
+            let attrs = self.nodes.lock().unwrap();
+
+            let default = [&*ROOT_DOT, &*ROOT_DOTDOT];
+            for (i, (attr, name)) in default
+                .into_iter()
+                .copied()
+                .chain(names.iter().map(|(name, ino)| {
+                    let attr = attrs.get(ino).unwrap();
+                    (*attr, &**name)
+                }))
+                .skip(offset as usize)
+                .enumerate()
+            {
+                let full = reply.add(attr.ino, offset + i as u64 + 1, attr.kind, name);
+
+                if full {
+                    break;
+                }
+            }
+
+            reply.ok();
+        }
+
+        fn write(
+            &self,
+            _req: &Request,
+            _ino: INodeNo,
+            _fh: FileHandle,
+            _offset: u64,
+            data: &[u8],
+            _write_flags: WriteFlags,
+            _flags: OpenFlags,
+            _lock_owner: Option<LockOwner>,
+            reply: ReplyWrite,
+        ) {
+            if self.flags & DIE_ON_WRITE == DIE_ON_WRITE {
+                reply.error(Errno::EOWNERDEAD);
+                return;
+            }
+
+            reply.written(data.len().try_into().unwrap());
+        }
+
+        fn fsync(
+            &self,
+            _req: &Request,
+            _ino: INodeNo,
+            _fh: FileHandle,
+            _datasync: bool,
+            reply: ReplyEmpty,
+        ) {
+            if self.flags & DIE_ON_FSYNC == DIE_ON_FSYNC {
+                reply.error(Errno::EOWNERDEAD);
+                return;
+            }
+
+            reply.ok();
+        }
+
+        fn lookup(&self, _req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEntry) {
+            if self.flags & DIE_ON_LOOKUP == DIE_ON_LOOKUP {
+                reply.error(Errno::EOWNERDEAD);
+                return;
+            }
+
+            if parent == INodeNo::ROOT
+                && let Some(ino) = self.by_name.lock().unwrap().get(name)
+                && let Some(attr) = self.nodes.lock().unwrap().get(ino)
+            {
+                reply.entry(&Duration::ZERO, attr, Generation(0));
+            } else {
+                reply.error(Errno::ENOENT);
+            }
+        }
+    }
+
+    fn attr(ino: INodeNo, size: u64, kind: FileType, perm: u16) -> FileAttr {
+        let uid = unsafe { libc::getuid() };
+        assert_ne!(0, uid);
+        let gid = unsafe { libc::getgid() };
+        assert_ne!(0, gid);
+
+        let blocks = size / BLOCK_SIZE as u64;
+
+        FileAttr {
+            ino,
+            size,
+            blocks,
+            atime: SystemTime::UNIX_EPOCH,
+            mtime: SystemTime::UNIX_EPOCH,
+            ctime: SystemTime::UNIX_EPOCH,
+            crtime: SystemTime::UNIX_EPOCH,
+            kind,
+            perm,
+            nlink: 1,
+            uid,
+            gid,
+            rdev: 0,
+            blksize: BLOCK_SIZE,
+            flags: libc::O_RDWR as _,
+        }
     }
 }
