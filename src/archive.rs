@@ -241,7 +241,7 @@ fn single_file_name(path: &Path, stored_file_name: Option<Vec<u8>>) -> String {
         }
     }
 
-    // Second try deriving the file name from the original name with the extension remvoved.
+    // Second try deriving the file name from the original name with the extension removed.
     let file_name = path
         .file_name()
         .and_then(|f| f.to_str())
