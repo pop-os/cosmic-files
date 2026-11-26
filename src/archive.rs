@@ -1,14 +1,17 @@
 use crate::mime_icon::mime_for_path;
-use crate::operation::{Controller, OpReader, OperationError, OperationErrorType, SYNC_BATCH};
+use crate::operation::{
+    Controller, OpReader, OperationError, OperationErrorType, SYNC_BATCH, copy_unique_path,
+};
 use cosmic::iced::futures;
 use jiff::Zoned;
 use jiff::civil::DateTime;
 use jiff::tz::TimeZone;
 use std::collections::HashSet;
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::str::FromStr;
+use std::time::{Duration, SystemTime};
 use zip::result::ZipError;
 
 pub const SUPPORTED_ARCHIVE_TYPES: &[&str] = &[
@@ -28,9 +31,14 @@ pub const SUPPORTED_ARCHIVE_TYPES: &[&str] = &[
     "application/x-xz",
     #[cfg(feature = "lzma-rust2")]
     "application/x-xz-compressed-tar",
+    #[cfg(feature = "lzma-rust2")]
+    "application/x-lzma",
+    #[cfg(feature = "lzma-rust2")]
+    "application/x-lzma-compressed-tar",
 ];
 
-pub const SUPPORTED_EXTENSIONS: &[&str] = &[
+// Order matters. Compound extensions must come before their single extensions.
+const SUPPORTED_EXTENSIONS: &[&str] = &[
     ".tar.bz2",
     ".tar.gz",
     ".tar.lzma",
@@ -38,72 +46,215 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     ".tgz",
     ".tar",
     ".zip",
+    ".bz2",
+    ".gz",
+    ".lzma",
+    ".xz",
 ];
+
+struct StoredMetadata {
+    file_name: Option<Vec<u8>>,
+    mtime: Option<SystemTime>,
+}
 
 pub fn extract(
     path: &Path,
-    new_dir: &Path,
+    to: &Path,
     password: &Option<String>,
     controller: &Controller,
-) -> Result<(), OperationError> {
+) -> Result<PathBuf, OperationError> {
+    let op_reader = || OpReader::new(path, controller.clone()).map(io::BufReader::new);
+    let operation_error = |e| OperationError::from_err(e, controller);
     let mime = mime_for_path(path, None, false);
     let password = password.as_deref();
     match mime.essence_str() {
         "application/gzip" | "application/x-compressed-tar" => {
-            OpReader::new(path, controller.clone())
-                .map(io::BufReader::new)
-                .map(flate2::read::GzDecoder::new)
-                .map(tar::Archive::new)
-                .and_then(|mut archive| archive.unpack(new_dir))
-                .map_err(|e| OperationError::from_err(e, controller))
-                .map(|_| Default::default())
+            op_reader()
+                .map(flate2::read::MultiGzDecoder::new)
+                .and_then(|decoder| {
+                    extract_compressed(
+                        path,
+                        to,
+                        decoder,
+                        // gzip sometimes has filename and mtime that we can use
+                        |decoder| {
+                            Some(StoredMetadata {
+                                file_name: decoder
+                                    .header()
+                                    .and_then(|h| h.filename())
+                                    .map(<[u8]>::to_vec),
+                                mtime: decoder.header().map(|h| h.mtime()).filter(|&t| t != 0).map(
+                                    |t| SystemTime::UNIX_EPOCH + Duration::from_secs(t.into()),
+                                ),
+                            })
+                        },
+                    )
+                })
+                .map_err(operation_error)
         }
-        "application/x-tar" => OpReader::new(path, controller.clone())
-            .map(io::BufReader::new)
-            .map(tar::Archive::new)
-            .and_then(|mut archive| archive.unpack(new_dir))
-            .map_err(|e| OperationError::from_err(e, controller))
-            .map(|_| Default::default()),
-        "application/zip" => fs::File::open(path)
-            .map(io::BufReader::new)
-            .map(zip::ZipArchive::new)
-            .map_err(|e| OperationError::from_err(e, controller))?
-            .and_then(move |mut archive| {
-                zip_extract(&mut archive, new_dir, password, controller.clone())
-            })
-            .map_err(|e| match e {
-                ZipError::UnsupportedArchive(ZipError::PASSWORD_REQUIRED)
-                | ZipError::InvalidPassword => {
-                    OperationError::from_kind(OperationErrorType::PasswordRequired, controller)
-                }
-                _ => OperationError::from_err(e, controller),
-            }),
+        "application/x-tar" => {
+            let dir = unique_extraction_dir(path, to);
+            op_reader()
+                .map(tar::Archive::new)
+                .and_then(|mut archive| archive.unpack(&dir))
+                .map(|_| dir)
+                .map_err(operation_error)
+        }
+        "application/zip" => {
+            let dir = unique_extraction_dir(path, to);
+            fs::File::open(path)
+                .map(io::BufReader::new)
+                .map(zip::ZipArchive::new)
+                .map_err(|e| OperationError::from_err(e, controller))?
+                .and_then(|mut archive| {
+                    zip_extract(&mut archive, &dir, password, controller.clone())
+                })
+                .map(|_| dir)
+                .map_err(|e| match e {
+                    ZipError::UnsupportedArchive(ZipError::PASSWORD_REQUIRED)
+                    | ZipError::InvalidPassword => {
+                        OperationError::from_kind(OperationErrorType::PasswordRequired, controller)
+                    }
+                    _ => OperationError::from_err(e, controller),
+                })
+        }
         #[cfg(feature = "bzip2")]
         "application/x-bzip"
         | "application/x-bzip-compressed-tar"
         | "application/x-bzip2"
-        | "application/x-bzip2-compressed-tar" => OpReader::new(path, controller.clone())
-            .map(io::BufReader::new)
-            .map(bzip2::read::BzDecoder::new)
-            .map(tar::Archive::new)
-            .and_then(|mut archive| archive.unpack(new_dir))
-            .map_err(|e| OperationError::from_err(e, controller))
-            .map(|_| Default::default()),
+        | "application/x-bzip2-compressed-tar" => op_reader()
+            .map(bzip2::read::MultiBzDecoder::new)
+            .and_then(|decoder| extract_compressed(path, to, decoder, |_| None))
+            .map_err(operation_error),
         #[cfg(feature = "lzma-rust2")]
-        "application/x-xz" | "application/x-xz-compressed-tar" => {
-            OpReader::new(path, controller.clone())
-                .map(io::BufReader::new)
-                .map(|reader| lzma_rust2::XzReader::new(reader, true))
-                .map(tar::Archive::new)
-                .and_then(|mut archive| archive.unpack(new_dir))
-                .map_err(|e| OperationError::from_err(e, controller))
-                .map(|_| Default::default())
-        }
+        "application/x-xz" | "application/x-xz-compressed-tar" => op_reader()
+            .map(|reader| lzma_rust2::XzReader::new(reader, true))
+            .and_then(|decoder| extract_compressed(path, to, decoder, |_| None))
+            .map_err(operation_error),
+        #[cfg(feature = "lzma-rust2")]
+        "application/x-lzma" | "application/x-lzma-compressed-tar" => op_reader()
+            .map(|reader| lzma_rust2::LzmaReader::new_mem_limit(reader, u32::MAX, None))
+            .and_then(|decoder| extract_compressed(path, to, decoder?, |_| None))
+            .map_err(operation_error),
         _ => Err(OperationError::from_err(
             format!("unsupported mime type {mime:?}"),
             controller,
         )),
     }
+}
+
+/// Extracts from a compressed file that could be either a single file or a tar archive.
+/// For a single file, the file gets extracted with a name and mtime from the metadata
+/// if it exists, but falls back to deriving from the original file.
+/// If it's a tar, all of the files get extracted to a directory named from the original file.
+fn extract_compressed<D: Read>(
+    path: &Path,
+    to: &Path,
+    mut decoder: D,
+    stored_metadata: impl FnOnce(&D) -> Option<StoredMetadata>,
+) -> io::Result<PathBuf> {
+    let metadata = stored_metadata(&decoder);
+    let mut header = Vec::with_capacity(512);
+    decoder.by_ref().take(512).read_to_end(&mut header)?;
+
+    // This simple check if it's a tar will give a false positive for an
+    // unlikely single file that just happens to have "ustar" at this position.
+    // For a more robust check we could compute and compare the checksum of the header, but this
+    // simpler check is probably good enough.
+    let is_tar = header.len() >= 262 && &header[257..262] == b"ustar";
+    let decoder = Cursor::new(header).chain(decoder);
+
+    if is_tar {
+        let dir = unique_extraction_dir(path, to);
+        tar::Archive::new(decoder).unpack(&dir)?;
+        Ok(dir)
+    } else {
+        let (stored_file_name, stored_mtime) =
+            metadata.map(|m| (m.file_name, m.mtime)).unwrap_or_default();
+        let out_path = unique_single_file_path(path, to, stored_file_name);
+        extract_single_file(path, out_path, decoder, stored_mtime)
+    }
+}
+
+fn extract_single_file<D: Read>(
+    path: &Path,
+    out_path: PathBuf,
+    mut decoder: D,
+    stored_mtime: Option<SystemTime>,
+) -> io::Result<PathBuf> {
+    let mut file = fs::File::create(&out_path)?;
+    if let Err(e) = io::copy(&mut decoder, &mut file) {
+        drop(file);
+        let _ = fs::remove_file(&out_path);
+        return Err(e);
+    }
+
+    match io::copy(&mut decoder, &mut file) {
+        Ok(_) => {
+            if let Some(mtime) = stored_mtime {
+                let _ = file.set_modified(mtime);
+            } else if let Ok(metadata) = fs::metadata(path) {
+                if let Ok(mtime) = metadata.modified() {
+                    let _ = file.set_modified(mtime);
+                }
+            }
+        }
+        Err(e) => {
+            drop(file);
+            let _ = fs::remove_file(&out_path);
+            return Err(e);
+        }
+    }
+
+    Ok(out_path)
+}
+
+fn unique_extraction_dir(path: &Path, to: &Path) -> PathBuf {
+    let filename = path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("archive");
+    let file_stem = SUPPORTED_EXTENSIONS
+        .iter()
+        .find_map(|ext| filename.strip_suffix(ext))
+        .unwrap_or(filename);
+
+    copy_unique_path(&to.join(file_stem), to)
+}
+
+fn unique_single_file_path(path: &Path, to: &Path, stored_file_name: Option<Vec<u8>>) -> PathBuf {
+    let file_name = single_file_name(path, stored_file_name);
+    copy_unique_path(&to.join(file_name), to)
+}
+
+fn single_file_name(path: &Path, stored_file_name: Option<Vec<u8>>) -> String {
+    // First try to get stored file name, but guard against malicious values.
+    if let Some(ref raw) = stored_file_name {
+        let s = String::from_utf8_lossy(&raw);
+        if let Ok(p) = PathBuf::from_str(&s)
+            && let Some(file_name) = p.file_name()
+        {
+            let file_name = file_name.to_string_lossy();
+            if !file_name.is_empty() && file_name != "." && file_name != ".." {
+                return file_name.to_string();
+            }
+        }
+    }
+
+    // Second try deriving the file name from the original name with the extension removed.
+    let file_name = path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("archive");
+    let lower = file_name.to_ascii_lowercase();
+    for ext in SUPPORTED_EXTENSIONS {
+        if lower.ends_with(ext) && file_name.len() > ext.len() {
+            return (&file_name[..file_name.len() - ext.len()]).to_string();
+        }
+    }
+
+    // If all else fails, just append ".out" to the original file name.
+    format!("{file_name}.out")
 }
 
 // From https://docs.rs/zip/latest/zip/read/struct.ZipArchive.html#method.extract, with cancellation and progress added
