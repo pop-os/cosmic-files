@@ -72,16 +72,6 @@ async fn handle_replace(
     rx.recv().await.unwrap_or(ReplaceResult::Cancel)
 }
 
-fn get_directory_name(file_name: &str) -> &str {
-    // TODO: Chain with COMPOUND_EXTENSIONS once more formats are supported
-    for ext in crate::archive::SUPPORTED_EXTENSIONS {
-        if let Some(stripped) = file_name.strip_suffix(ext) {
-            return stripped;
-        }
-    }
-    file_name
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ReplaceResult {
     Replace(bool),
@@ -982,21 +972,10 @@ impl Operation {
 
                             controller.set_progress((i as f32) / total_paths as f32);
 
-                            if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-                                let dir_name = get_directory_name(file_name);
-                                let mut new_dir = to.join(dir_name);
-
-                                if new_dir.exists()
-                                    && let Some(new_dir_parent) = new_dir.parent()
-                                {
-                                    new_dir = copy_unique_path(&new_dir, new_dir_parent);
-                                }
-
-                                op_sel.ignored.push(path.clone());
-                                op_sel.selected.push(new_dir.clone());
-
-                                crate::archive::extract(path, &new_dir, &password, &controller)?;
-                            }
+                            let created =
+                                crate::archive::extract(path, &to, &password, &controller)?;
+                            op_sel.ignored.push(path.clone());
+                            op_sel.selected.push(created);
                         }
 
                         Ok::<_, OperationError>(op_sel)
