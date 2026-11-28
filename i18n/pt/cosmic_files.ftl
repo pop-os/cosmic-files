@@ -144,8 +144,8 @@ settings = Definições
 appearance = Aparência
 theme = Tema
 match-desktop = Estilo do sistema
-dark = Escuro
-light = Claro
+dark = Estilo escuro
+light = Estilo claro
 # Context menu
 extract-here = Extrair
 add-to-sidebar = Adicionar à barra lateral

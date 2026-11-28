@@ -40,7 +40,7 @@ zoom-out = Thu nhỏ
 view = Xem
 menu-settings = Cài đặt...
 run = Chạy
-comment = Trình quản lý tệp cho desktop COSMIC
+comment = Trình quản lý tệp cho máy tính COSMIC
 keywords = Thư mục;Trình quản lý;
 copy-path = Sao chép đường dẫn
 compress = Nén...
@@ -169,8 +169,8 @@ compressing =
     } từ "{ $from }" sang "{ $to }" ({ $progress })...
 compressed =
     Đã nén { $items } { $items ->
-        [one] item
-       *[other] items
+        [one] mục
+       *[other] mục
     } từ "{ $from }" thành "{ $to }"
 copy_noun = Sao chép
 creating = Tạo "{ $name }" trong "{ $parent }"
@@ -210,13 +210,13 @@ extracted =
 setting-executable-and-launching = Đang đặt "{ $name }" làm tệp thực thi và khởi chạy
 moving =
     Đang chuyển { $items } { $items ->
-        [one] item
-       *[other] items
+        [one] mục
+       *[other] mục
     } từ "{ $from }" sang "{ $to }" ({ $progress })...
 moved =
     Đã chuyển { $items } { $items ->
-        [one] item
-       *[other] items
+        [one] mục
+       *[other] mục
     } từ "{ $from }" sang "{ $to }"
 permanently-deleting =
     Xóa vĩnh viễn { $items } { $items ->
@@ -315,7 +315,7 @@ rename-confirm = Đổi tên
 history = Lịch sử...
 search-application = Tìm kiếm theo tên ứng dụng
 show-details = Hiện chi tiết...
-checksum = Checksum { $kind }
+checksum = Mã kiểm tra { $kind }
 error = Lỗi
 show-recents = Thư mục gần đây trong thanh bên
 clear-recents-history = Xóa lịch sử gần đây
@@ -326,3 +326,7 @@ desktop-appearance = Giao diện máy tính...
 set-executable-and-launched = Đặt "{ $name }" làm tệp thực thi và khởi chạy
 setting-permissions = Đang đặt quyền cho "{ $name }" thành { $mode }
 set-permissions = Đặt quyền cho "{ $name }" thành { $mode }
+items = Mục: { $items }
+calculate = Tính
+change-sidebar-label = Thay đổi nhãn thanh bên
+sidebar-label = Thanh bên
